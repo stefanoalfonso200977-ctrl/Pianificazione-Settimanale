@@ -26,7 +26,10 @@ app.post("/api/gemini/breakdown", async (req, res) => {
 
     if (!apiKey) {
       console.error("Gemini API Key is missing!");
-      throw new Error("Gemini API Key not found");
+      return res.status(401).json({ 
+        error: "API Key mancante su Vercel", 
+        details: "Vai su Vercel > Settings > Environment Variables e aggiungi MY_GEMINI_KEY" 
+      });
     }
 
     // Log key details for debugging (do not log the full key)
