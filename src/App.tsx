@@ -105,12 +105,30 @@ const api = {
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
   },
   breakdownTask: async (description: string, files?: TaskFile[]) => {
-    const res = await fetch("/api/gemini/breakdown", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskDescription: description, files }),
-    });
-    return res.json();
+    try {
+      const res = await fetch("/api/gemini/breakdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskDescription: description, files }),
+      });
+      
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || data.details || "Errore sconosciuto dal server");
+        }
+        return data;
+      } else {
+        // If not JSON, it's likely an HTML error page from Vercel (404, 500, etc.)
+        const text = await res.text();
+        console.error("Non-JSON response:", text);
+        throw new Error(`Errore di comunicazione con il server (Status: ${res.status}). Controlla i log di Vercel.`);
+      }
+    } catch (e: any) {
+      console.error("Breakdown error:", e);
+      return { error: e.message };
+    }
   },
   getSettings: async () => {
     const res = await fetch("/api/settings");

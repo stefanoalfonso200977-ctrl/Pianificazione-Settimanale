@@ -11,6 +11,16 @@ app.use(express.json({ limit: '50mb' })); // Increase limit for file uploads
 
 // --- API Routes ---
 
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    env: {
+      hasGemini: !!(process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY),
+      region: process.env.VERCEL_REGION || "unknown"
+    }
+  });
+});
+
 // Gemini Integration
 app.post("/api/gemini/breakdown", async (req, res) => {
   const { taskDescription, files } = req.body;
