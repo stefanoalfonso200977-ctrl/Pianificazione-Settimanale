@@ -58,8 +58,17 @@ const api = {
   useFirebase: () => !!db,
   
   getTasks: async () => {
-    // If Firebase is active, this is handled by onSnapshot in useEffect
-    if (db) return []; 
+    // If Firebase is active, we try to fetch once (though onSnapshot usually handles this)
+    if (db) {
+      try {
+        const { getDocs, collection } = await import("firebase/firestore");
+        const snapshot = await getDocs(collection(db, "tasks"));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[];
+      } catch (e) {
+        console.error("Error fetching from Firebase:", e);
+        return [];
+      }
+    }
     
     // LocalStorage Fallback
     const tasks = localStorage.getItem("tasks");
@@ -643,6 +652,10 @@ export default function App() {
   };
 
   const refreshTasks = async () => {
+    // If Firebase is active, we rely on the real-time listener (onSnapshot)
+    // to update the state. Manually fetching might cause race conditions or empty state.
+    if (api.useFirebase()) return;
+    
     const data = await api.getTasks();
     setTasks(data);
   };
