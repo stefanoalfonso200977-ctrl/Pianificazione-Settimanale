@@ -1,10 +1,8 @@
 import "dotenv/config";
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
 const app = express();
-const PORT = 3000;
 
 // Middleware
 app.use(express.json({ limit: '50mb' })); // Increase limit for file uploads
@@ -95,27 +93,6 @@ app.get("/api/debug/env", (req, res) => {
     hasGemini: !!(process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY)
   });
 });
-
-// Start Server (Only if not running in Vercel/Serverless environment)
-// Vercel exports the app, so we don't want to listen on a port
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-  startServer();
-}
-
-async function startServer() {
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
 
 // Export for Vercel
 export default app;
