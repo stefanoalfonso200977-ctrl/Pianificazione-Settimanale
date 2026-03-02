@@ -53,16 +53,17 @@ interface Task {
   files?: TaskFile[];
 }
 
-// API Service Wrapper (Hybrid: SQLite or Firebase)
+// API Service Wrapper (Hybrid: Firebase or LocalStorage)
 const api = {
   useFirebase: () => !!db,
   
   getTasks: async () => {
     // If Firebase is active, this is handled by onSnapshot in useEffect
-    // This fallback is for SQLite
     if (db) return []; 
-    const res = await fetch("/api/tasks");
-    return res.json();
+    
+    // LocalStorage Fallback
+    const tasks = localStorage.getItem("tasks");
+    return tasks ? JSON.parse(tasks) : [];
   },
   createTask: async (task: Partial<Task>) => {
     if (db) {
@@ -75,12 +76,13 @@ const api = {
       });
       return;
     }
-    const res = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(task),
-    });
-    return res.json();
+    
+    // LocalStorage Fallback
+    const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+    const newTask = { ...task, id: Date.now(), status: "pending", subtasks: task.subtasks || [], files: task.files || [] };
+    tasks.push(newTask);
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+    return newTask;
   },
   updateTask: async (id: string | number, task: Partial<Task>) => {
     if (db) {
@@ -90,19 +92,23 @@ const api = {
       await updateDoc(docRef, updateData);
       return;
     }
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(task),
-    });
-    return res.json();
+    
+    // LocalStorage Fallback
+    const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+    const updatedTasks = tasks.map((t: Task) => t.id === id ? { ...t, ...task } : t);
+    localStorage.setItem("tasks", JSON.stringify(updatedTasks));
+    return { success: true };
   },
   deleteTask: async (id: string | number) => {
     if (db) {
       await deleteDoc(doc(db, "tasks", String(id)));
       return;
     }
-    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    
+    // LocalStorage Fallback
+    const tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+    const filteredTasks = tasks.filter((t: Task) => t.id !== id);
+    localStorage.setItem("tasks", JSON.stringify(filteredTasks));
   },
   breakdownTask: async (description: string, files?: TaskFile[]) => {
     try {
@@ -131,26 +137,21 @@ const api = {
     }
   },
   getSettings: async () => {
-    const res = await fetch("/api/settings");
-    return res.json();
+    // LocalStorage Fallback
+    const email = localStorage.getItem("settings_email");
+    return { email: email || "" };
   },
   saveSettings: async (email: string) => {
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
+    // LocalStorage Fallback
+    localStorage.setItem("settings_email", email);
   },
   triggerCheck: async () => {
-    await fetch("/api/debug/check-deadlines", { method: "POST" });
+    // No-op for LocalStorage
+    console.log("Trigger check not supported in LocalStorage mode");
   },
   testEmail: async (email: string) => {
-    const res = await fetch("/api/debug/test-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    return res.json();
+    // No-op for LocalStorage
+    return { success: false, error: "Email testing requires backend SMTP" };
   },
   getEnvStatus: async () => {
     const res = await fetch("/api/debug/env");
