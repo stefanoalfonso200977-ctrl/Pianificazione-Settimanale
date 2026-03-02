@@ -41,6 +41,18 @@ Un'applicazione web per la gestione delle attività condominiali, potenziata dal
 
 5. Apri il browser su `http://localhost:3000`.
 
-## Distribuzione
+## Distribuzione su Vercel
 
-L'applicazione è configurata come PWA (Progressive Web App) e può essere installata su dispositivi mobili e desktop direttamente dal browser.
+L'applicazione è pronta per essere distribuita su Vercel.
+
+1. Fai il fork o push di questo repository sul tuo GitHub.
+2. Vai su [Vercel](https://vercel.com) e clicca "Add New Project".
+3. Importa il repository da GitHub.
+4. Nelle impostazioni del progetto su Vercel, aggiungi le variabili d'ambiente:
+   - `MY_GEMINI_KEY`: La tua chiave API di Google Gemini.
+   - `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`: (Opzionale) Per le notifiche email.
+5. Clicca "Deploy".
+
+**Nota:** Su Vercel, il database SQLite locale (`tasks.db`) non persisterà i dati tra i riavvii. Assicurati di configurare **Firebase** nell'app (Impostazioni -> Sincronizzazione Cloud) per salvare i dati in modo permanente.
+
+## Distribuzione PWA

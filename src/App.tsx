@@ -675,16 +675,7 @@ export default function App() {
             <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
               <CheckCircle className="w-6 h-6" />
             </div>
-            <div>
-              Agente Pianificazione Lavoro
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                <span className="text-[9px] font-bold text-green-600 uppercase tracking-wider">Sincronizzazione Live</span>
-              </div>
-            </div>
+            Agente Pianificazione Lavoro
           </div>
           <nav className="flex gap-1 bg-gray-100/50 p-1.5 rounded-2xl">
             {[
