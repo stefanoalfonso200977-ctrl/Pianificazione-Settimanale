@@ -1,0 +1,5 @@
+{
+  "name": "Agente Pianificazione Lavoro",
+  "description": "Un'applicazione intelligente per la gestione dei task con monitoraggio scadenze, integrazione Gemini per la suddivisione dei compiti e notifiche via email.",
+  "requestFramePermissions": []
+}
