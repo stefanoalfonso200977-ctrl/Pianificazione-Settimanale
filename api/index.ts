@@ -24,9 +24,7 @@ app.post("/api/gemini/breakdown", async (req, res) => {
   const { taskDescription, files } = req.body;
   
   try {
-    // Prioritize MY_GEMINI_KEY as it's the one we set in .env
-    // DO NOT TRIM THE KEY - sometimes keys have special characters that trim might remove incorrectly if not careful, 
-    // though usually trim is safe. Let's try raw first to be sure.
+    // Prioritize MY_GEMINI_KEY for user deployments, fallback to GEMINI_API_KEY for AI Studio preview
     let apiKey = process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY || "";
     
     // Remove any accidental quotes and whitespace
@@ -84,6 +82,12 @@ app.post("/api/gemini/breakdown", async (req, res) => {
     res.json({ subtasks });
   } catch (error: any) {
     console.error("Gemini Error:", error);
+    if (error.message && error.message.includes("API key not valid")) {
+      return res.status(401).json({ 
+        error: "Chiave API non valida", 
+        details: "La chiave API inserita su Vercel (MY_GEMINI_KEY) non è valida o è stata revocata. Generane una nuova su Google AI Studio e aggiornala su Vercel." 
+      });
+    }
     res.status(500).json({ error: "Errore durante l'elaborazione con Gemini", details: error.message });
   }
 });
@@ -129,6 +133,12 @@ app.post("/api/gemini/parse-task", async (req, res) => {
     res.json(taskData);
   } catch (error: any) {
     console.error("Gemini Parse Error:", error);
+    if (error.message && error.message.includes("API key not valid")) {
+      return res.status(401).json({ 
+        error: "Chiave API non valida", 
+        details: "La chiave API inserita su Vercel (MY_GEMINI_KEY) non è valida o è stata revocata. Generane una nuova su Google AI Studio e aggiornala su Vercel." 
+      });
+    }
     res.status(500).json({ error: "Errore durante l'elaborazione con Gemini", details: error.message });
   }
 });

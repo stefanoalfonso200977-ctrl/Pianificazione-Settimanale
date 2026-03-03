@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent, type FC, type ChangeEvent } from "react";
-import { format, isSameDay, addDays, parseISO } from "date-fns";
+import { format, isSameDay, addDays, parseISO, differenceInCalendarDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database } from "lucide-react";
 import { DayPicker } from "react-day-picker";
@@ -203,7 +203,34 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const deadline = parseISO(task.deadline);
+  const daysLeft = differenceInCalendarDays(deadline, new Date());
   
+  let cardColorClass = "border-gray-100 bg-white";
+  let deadlineTextColor = "text-gray-400";
+  let alertElement = null;
+
+  if (task.status === "pending") {
+    if (daysLeft < 0) {
+      cardColorClass = "border-red-500 bg-red-50 shadow-sm shadow-red-100";
+      deadlineTextColor = "text-red-600 font-bold";
+      alertElement = (
+        <div className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full mt-1 w-fit">
+          <AlertTriangle className="w-3 h-3" />
+          Scaduto!
+        </div>
+      );
+    } else if (daysLeft === 0 || daysLeft === 1) {
+      cardColorClass = "border-red-300 bg-red-50/30";
+      deadlineTextColor = "text-red-500 font-bold";
+    } else if (daysLeft === 2) {
+      cardColorClass = "border-orange-300 bg-orange-50/30";
+      deadlineTextColor = "text-orange-500 font-bold";
+    } else if (daysLeft === 3) {
+      cardColorClass = "border-yellow-300 bg-yellow-50/30";
+      deadlineTextColor = "text-yellow-600 font-bold";
+    }
+  }
+
   const handleComplete = async () => {
     await api.updateTask(task.id, { ...task, status: task.status === "pending" ? "completed" : "pending" });
     onUpdate();
@@ -246,7 +273,7 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
 
   if (isEditing) {
     return (
-      <div className="p-3.5 rounded-xl border border-gray-100 shadow-sm bg-white space-y-2">
+      <div className={cn("p-3.5 rounded-xl border shadow-sm space-y-2", cardColorClass)}>
         <input
           type="text"
           value={editTitle}
@@ -316,7 +343,7 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="p-3.5 rounded-2xl border border-gray-100 shadow-[0_2px_15px_rgb(0,0,0,0.02)] bg-white transition-all w-full group"
+      className={cn("p-3.5 rounded-2xl border shadow-[0_2px_15px_rgb(0,0,0,0.02)] transition-all w-full group", cardColorClass)}
     >
       <div className="flex gap-3 items-start">
         {/* Checkbox Circle */}
@@ -326,7 +353,7 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
             "mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0",
             task.status === "completed" 
               ? "bg-indigo-600 border-indigo-600 text-white" 
-              : "border-gray-200 hover:border-indigo-300"
+              : "border-gray-200 hover:border-indigo-300 bg-white"
           )}
         >
           {task.status === "completed" && <CheckCircle className="w-3 h-3" />}
@@ -341,10 +368,11 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
               )}>
                 {task.title}
               </h3>
-              <div className="flex items-center gap-1.5 text-[9px] font-medium text-gray-400">
+              <div className={cn("flex items-center gap-1.5 text-[9px] font-medium", deadlineTextColor)}>
                 <CalendarIcon className="w-2.5 h-2.5" />
                 {format(deadline, "d MMM yyyy", { locale: it })}
               </div>
+              {alertElement}
             </div>
 
             <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
