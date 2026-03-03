@@ -24,8 +24,8 @@ app.post("/api/gemini/breakdown", async (req, res) => {
   const { taskDescription, files } = req.body;
   
   try {
-    // Prioritize MY_GEMINI_KEY for user deployments, fallback to GEMINI_API_KEY for AI Studio preview
-    let apiKey = process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY || "";
+    // Prioritize GEMINI_API_KEY (provided by AI Studio) over MY_GEMINI_KEY
+    let apiKey = process.env.GEMINI_API_KEY || process.env.MY_GEMINI_KEY || "";
     
     // Remove any accidental quotes and whitespace
     apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
@@ -96,7 +96,7 @@ app.post("/api/gemini/parse-task", async (req, res) => {
   const { text, currentDate } = req.body;
   
   try {
-    let apiKey = process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY || "";
+    let apiKey = process.env.GEMINI_API_KEY || process.env.MY_GEMINI_KEY || "";
     apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
 
     if (!apiKey) {

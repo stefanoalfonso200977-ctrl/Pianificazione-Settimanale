@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "./lib/utils";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
+import { GoogleGenAI } from "@google/genai";
 
 // Firebase Setup
 const firebaseConfig = {
@@ -121,24 +122,44 @@ const api = {
   },
   breakdownTask: async (description: string, files?: TaskFile[]) => {
     try {
-      const res = await fetch("/api/gemini/breakdown", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskDescription: description, files }),
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Chiave API mancante. Assicurati che GEMINI_API_KEY sia impostata.");
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
+      
+      let prompt = `Sei un assistente esperto di pianificazione. 
+      Analizza questa attività: "${description}".
+      Scomponila in 3-5 sotto-task concreti e azionabili.
+      Restituisci SOLO un array JSON di stringhe, senza markdown o altro testo.
+      Esempio: ["Comprare vernice", "Coprire mobili", "Dipingere parete"]`;
+
+      const parts: any[] = [{ text: prompt }];
+
+      if (files && Array.isArray(files)) {
+        for (const file of files) {
+          if (file.mimeType.startsWith('image/')) {
+            const base64Data = file.data.split(',')[1];
+            parts.push({
+              inlineData: {
+                data: base64Data,
+                mimeType: file.mimeType
+              }
+            });
+          }
+        }
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: { parts }
       });
       
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || data.details || "Errore sconosciuto dal server");
-        }
-        return data;
-      } else {
-        const text = await res.text();
-        console.error("Non-JSON response:", text);
-        throw new Error(`Errore di comunicazione con il server (Status: ${res.status}). Controlla i log di Vercel.`);
-      }
+      let text = response.text || "";
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      return { subtasks: JSON.parse(text) };
     } catch (e: any) {
       console.error("Breakdown error:", e);
       return { error: e.message };
@@ -146,24 +167,38 @@ const api = {
   },
   parseTask: async (text: string, currentDate: string) => {
     try {
-      const res = await fetch("/api/gemini/parse-task", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, currentDate }),
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Chiave API mancante. Assicurati che GEMINI_API_KEY sia impostata.");
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
+      
+      let prompt = `Sei un assistente esperto di pianificazione.
+      Oggi è il ${currentDate}.
+      Analizza la seguente richiesta dell'utente e crea un'attività strutturata.
+      Estrai un titolo conciso, una descrizione (se presente), una data di scadenza (formato YYYY-MM-DD) e 2-4 sotto-task se l'attività è complessa.
+      Se non viene specificata una data, usa la data di oggi.
+      
+      Richiesta: "${text}"
+      
+      Restituisci SOLO un oggetto JSON con questa struttura esatta, senza markdown o altro testo:
+      {
+        "title": "Titolo breve",
+        "description": "Descrizione opzionale",
+        "deadline": "YYYY-MM-DD",
+        "subtasks": ["sotto-task 1", "sotto-task 2"]
+      }`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
       });
       
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || data.details || "Errore sconosciuto dal server");
-        }
-        return data;
-      } else {
-        const responseText = await res.text();
-        console.error("Non-JSON response:", responseText);
-        throw new Error(`Errore di comunicazione con il server (Status: ${res.status}). Controlla i log di Vercel.`);
-      }
+      let responseText = response.text || "";
+      responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      return JSON.parse(responseText);
     } catch (e: any) {
       console.error("Parse error:", e);
       return { error: e.message };
