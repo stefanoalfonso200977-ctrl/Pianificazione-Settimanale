@@ -16,10 +16,10 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #e0e7ff;
+    background: #fee2e2;
     border-radius: 10px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #c7d2fe;
+    background: #fecaca;
   }
 }
