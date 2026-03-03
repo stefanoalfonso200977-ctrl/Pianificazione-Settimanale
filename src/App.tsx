@@ -64,7 +64,9 @@ const api = {
       try {
         const { getDocs, collection } = await import("firebase/firestore");
         const snapshot = await getDocs(collection(db, "tasks"));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[];
+        return snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(doc => doc.id !== "_settings_") as Task[];
       } catch (e) {
         console.error("Error fetching from Firebase:", e);
         return [];
@@ -622,7 +624,7 @@ function SettingsPanel() {
     api.getSettings().then(data => {
       setEmail(data.email || "");
       setSmtpHost(data.smtpHost || "");
-      setSmtpPort(data.smtpPort || "587");
+      setSmtpPort(String(data.smtpPort || "587"));
       setSmtpUser(data.smtpUser || "");
       setSmtpPass(data.smtpPass || "");
     });
