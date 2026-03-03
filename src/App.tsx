@@ -135,13 +135,37 @@ const api = {
         }
         return data;
       } else {
-        // If not JSON, it's likely an HTML error page from Vercel (404, 500, etc.)
         const text = await res.text();
         console.error("Non-JSON response:", text);
         throw new Error(`Errore di comunicazione con il server (Status: ${res.status}). Controlla i log di Vercel.`);
       }
     } catch (e: any) {
       console.error("Breakdown error:", e);
+      return { error: e.message };
+    }
+  },
+  parseTask: async (text: string, currentDate: string) => {
+    try {
+      const res = await fetch("/api/gemini/parse-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, currentDate }),
+      });
+      
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || data.details || "Errore sconosciuto dal server");
+        }
+        return data;
+      } else {
+        const responseText = await res.text();
+        console.error("Non-JSON response:", responseText);
+        throw new Error(`Errore di comunicazione con il server (Status: ${res.status}). Controlla i log di Vercel.`);
+      }
+    } catch (e: any) {
+      console.error("Parse error:", e);
       return { error: e.message };
     }
   },
@@ -608,6 +632,7 @@ function SettingsPanel() {
 export default function App() {
   const [view, setView] = useState<"home" | "calendar" | "history" | "settings">("home");
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [isParsing, setIsParsing] = useState(false);
   const [newTask, setNewTask] = useState<{title: string, description: string, deadline: string, files: TaskFile[]}>({ 
     title: "", 
     description: "", 
@@ -757,35 +782,62 @@ export default function App() {
               </div>
 
               {/* Add Task Form */}
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-[0_2px_15px_rgb(0,0,0,0.02)]">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-[0_2px_15px_rgb(0,0,0,0.02)] relative overflow-hidden">
                 <h2 className="text-base font-bold mb-3 flex items-center gap-3">
                   <span className="text-gray-300 font-light text-lg">+</span>
                   Aggiungi Nuova Attività
                 </h2>
-                <form onSubmit={handleCreateTask} className="space-y-3">
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newTask.title) return;
+                  
+                  // If it's just a title and no deadline was explicitly set by AI, 
+                  // we could just create it normally. But let's try to parse it if it looks like a sentence.
+                  if (newTask.title.split(' ').length > 2) {
+                    setIsParsing(true);
+                    const parsed = await api.parseTask(newTask.title, format(new Date(), "yyyy-MM-dd"));
+                    setIsParsing(false);
+                    
+                    if (parsed && !parsed.error) {
+                      await api.createTask({
+                        title: parsed.title || newTask.title,
+                        description: parsed.description || "",
+                        deadline: parsed.deadline || format(new Date(), "yyyy-MM-dd"),
+                        subtasks: parsed.subtasks || [],
+                        files: newTask.files
+                      });
+                      setNewTask({ title: "", description: "", deadline: format(new Date(), "yyyy-MM-dd"), files: [] });
+                      refreshTasks();
+                      return;
+                    }
+                  }
+                  
+                  // Fallback to normal creation
+                  await handleCreateTask(e);
+                }} className="space-y-3">
                   <div className="flex flex-col md:flex-row gap-2 items-center">
-                    <div className="flex-1 w-full">
+                    <div className="flex-1 w-full relative">
                       <input
                         type="text"
-                        placeholder="Titolo Attività (es. Inviare Report)"
-                        className="w-full rounded-lg border-gray-100 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 p-2 border text-sm font-medium transition-all outline-none"
+                        placeholder="Es. Devo inviare il report a Marco entro venerdì..."
+                        className="w-full rounded-lg border-gray-100 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 p-3 pl-10 border text-sm font-medium transition-all outline-none"
                         value={newTask.title}
                         onChange={e => setNewTask({ ...newTask, title: e.target.value })}
+                        disabled={isParsing}
                       />
-                    </div>
-                    <div className="w-full md:w-36">
-                      <input
-                        type="date"
-                        className="w-full rounded-lg border-gray-100 bg-gray-50/50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 p-2 border text-sm font-medium transition-all outline-none"
-                        value={newTask.deadline}
-                        onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
-                      />
+                      <Sparkles className={cn("w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors", newTask.title.length > 5 ? "text-indigo-500" : "text-gray-400")} />
                     </div>
                     <button
                       type="submit"
-                      className="w-full md:w-auto px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 font-bold text-sm shadow-md shadow-black/5 transition-all active:scale-95"
+                      disabled={isParsing || !newTask.title}
+                      className="w-full md:w-auto px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 font-bold text-sm shadow-md shadow-black/5 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      Aggiungi
+                      {isParsing ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Analisi AI...
+                        </>
+                      ) : "Aggiungi"}
                     </button>
                   </div>
                   
@@ -799,6 +851,7 @@ export default function App() {
                         className="hidden" 
                         accept=".pdf,.doc,.docx,image/*"
                         onChange={(e) => handleFileUpload(e, true)}
+                        disabled={isParsing}
                       />
                     </label>
                     
@@ -807,7 +860,7 @@ export default function App() {
                         {newTask.files.map((file, index) => (
                           <div key={index} className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600">
                             <span className="truncate max-w-[120px]">{file.name}</span>
-                            <button type="button" onClick={() => removeFile(index, true)} className="hover:text-red-500">
+                            <button type="button" onClick={() => removeFile(index, true)} className="hover:text-red-500" disabled={isParsing}>
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>

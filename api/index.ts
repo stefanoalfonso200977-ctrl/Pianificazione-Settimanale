@@ -29,8 +29,8 @@ app.post("/api/gemini/breakdown", async (req, res) => {
     // though usually trim is safe. Let's try raw first to be sure.
     let apiKey = process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY || "";
     
-    // Remove any accidental quotes if they were included in the .env value
-    apiKey = apiKey.replace(/^["']|["']$/g, '');
+    // Remove any accidental quotes and whitespace
+    apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
 
     if (!apiKey) {
       console.error("Gemini API Key is missing!");
@@ -84,6 +84,51 @@ app.post("/api/gemini/breakdown", async (req, res) => {
     res.json({ subtasks });
   } catch (error: any) {
     console.error("Gemini Error:", error);
+    res.status(500).json({ error: "Errore durante l'elaborazione con Gemini", details: error.message });
+  }
+});
+
+app.post("/api/gemini/parse-task", async (req, res) => {
+  const { text, currentDate } = req.body;
+  
+  try {
+    let apiKey = process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY || "";
+    apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
+
+    if (!apiKey) {
+      return res.status(401).json({ error: "API Key mancante su Vercel" });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    let prompt = `Sei un assistente esperto di pianificazione.
+    Oggi è il ${currentDate}.
+    Analizza la seguente richiesta dell'utente e crea un'attività strutturata.
+    Estrai un titolo conciso, una descrizione (se presente), una data di scadenza (formato YYYY-MM-DD) e 2-4 sotto-task se l'attività è complessa.
+    Se non viene specificata una data, usa la data di oggi.
+    
+    Richiesta: "${text}"
+    
+    Restituisci SOLO un oggetto JSON con questa struttura esatta, senza markdown o altro testo:
+    {
+      "title": "Titolo breve",
+      "description": "Descrizione opzionale",
+      "deadline": "YYYY-MM-DD",
+      "subtasks": ["sotto-task 1", "sotto-task 2"]
+    }`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: prompt
+    });
+    
+    let responseText = response.text || "";
+    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    const taskData = JSON.parse(responseText);
+    res.json(taskData);
+  } catch (error: any) {
+    console.error("Gemini Parse Error:", error);
     res.status(500).json({ error: "Errore durante l'elaborazione con Gemini", details: error.message });
   }
 });
