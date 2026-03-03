@@ -1,49 +1,56 @@
 import "dotenv/config";
 import express from "express";
 import { GoogleGenAI } from "@google/genai";
-import fs from "fs";
-import path from "path";
 import cron from "node-cron";
 import nodemailer from "nodemailer";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
 
 const app = express();
 
 // Middleware
-app.use(express.json({ limit: '50mb' })); // Increase limit for file uploads
+app.use(express.json({ limit: '50mb' }));
 
-// --- Data Persistence Helper ---
-const DATA_DIR = path.join(process.cwd(), "data");
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR);
-}
+// --- Firebase Setup ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAiYIjjUQWY5QrMwHeSHyGuWSbZzeUeB-U",
+  authDomain: "pianificazione-settimana.firebaseapp.com",
+  projectId: "pianificazione-settimana",
+  storageBucket: "pianificazione-settimana.firebasestorage.app",
+  messagingSenderId: "337752358600",
+  appId: "1:337752358600:web:72e18f37536b07b7abaffd"
+};
 
-const TASKS_FILE = path.join(DATA_DIR, "tasks.json");
-const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
-const readJson = (file: string, defaultVal: any = []) => {
+const getSettingsFromFirebase = async () => {
   try {
-    if (!fs.existsSync(file)) return defaultVal;
-    const data = fs.readFileSync(file, "utf-8");
-    return JSON.parse(data);
+    const docRef = doc(db, "config", "settings");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+    return {};
   } catch (e) {
-    console.error(`Error reading ${file}:`, e);
-    return defaultVal;
+    console.error("Error fetching settings from Firebase:", e);
+    return {};
   }
 };
 
-const writeJson = (file: string, data: any) => {
+const saveSettingsToFirebase = async (settings: any) => {
   try {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const docRef = doc(db, "config", "settings");
+    await setDoc(docRef, settings, { merge: true });
   } catch (e) {
-    console.error(`Error writing ${file}:`, e);
+    console.error("Error saving settings to Firebase:", e);
   }
 };
 
 // --- Email Logic ---
 const sendEmail = async (to: string, subject: string, html: string) => {
-  const settings = readJson(SETTINGS_FILE, {});
+  const settings = await getSettingsFromFirebase();
   
-  // If no SMTP settings, log to console (Simulation)
   if (!settings.smtpHost) {
     console.log("--- EMAIL SIMULATION ---");
     console.log(`To: ${to}`);
@@ -53,12 +60,11 @@ const sendEmail = async (to: string, subject: string, html: string) => {
     return { success: true, simulated: true };
   }
 
-  // Real Email Sending
   try {
     const transporter = nodemailer.createTransport({
       host: settings.smtpHost,
-      port: settings.smtpPort || 587,
-      secure: settings.smtpSecure || false,
+      port: parseInt(settings.smtpPort) || 587,
+      secure: parseInt(settings.smtpPort) === 465,
       auth: {
         user: settings.smtpUser,
         pass: settings.smtpPass,
@@ -87,25 +93,32 @@ cron.schedule("0 8 * * *", async () => {
 });
 
 const checkAndNotify = async () => {
-  const settings = readJson(SETTINGS_FILE, {});
+  const settings = await getSettingsFromFirebase();
   if (!settings.email) {
     console.log("No notification email configured.");
     return;
   }
 
-  const tasks = readJson(TASKS_FILE, []);
+  let tasks: any[] = [];
+  try {
+    const snapshot = await getDocs(collection(db, "tasks"));
+    tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (e) {
+    console.error("Error fetching tasks for cron:", e);
+    return;
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const expiringTasks = tasks.filter((task: any) => {
-    if (task.status === "completed") return false;
+    if (task.status === "completed" || !task.deadline) return false;
     const deadline = new Date(task.deadline);
     deadline.setHours(0, 0, 0, 0);
     
     const diffTime = deadline.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    // Check for 3 days before OR exactly today (0 days)
     return diffDays >= 0 && diffDays <= 3;
   });
 
@@ -114,7 +127,6 @@ const checkAndNotify = async () => {
     return;
   }
 
-  // Build Email Content
   const tasksHtml = expiringTasks.map((t: any) => {
     const deadline = new Date(t.deadline);
     const isToday = deadline.toDateString() === today.toDateString();
@@ -126,7 +138,7 @@ const checkAndNotify = async () => {
     </li>`;
   }).join("");
 
-  const confirmLink = `${process.env.APP_URL || "http://localhost:3000"}/api/confirm-view?email=${encodeURIComponent(settings.email)}`;
+  const confirmLink = `${process.env.APP_URL || "https://pianificazione-settimana.web.app"}/api/confirm-view?email=${encodeURIComponent(settings.email)}`;
 
   const html = `
     <h2>Riepilogo Attività in Scadenza</h2>
@@ -151,53 +163,15 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Tasks CRUD
-app.get("/api/tasks", (req, res) => {
-  const tasks = readJson(TASKS_FILE, []);
-  res.json(tasks);
-});
-
-app.post("/api/tasks", (req, res) => {
-  const tasks = readJson(TASKS_FILE, []);
-  const newTask = { ...req.body, id: Date.now(), createdAt: new Date().toISOString() };
-  tasks.push(newTask);
-  writeJson(TASKS_FILE, tasks);
-  res.json(newTask);
-});
-
-app.put("/api/tasks/:id", (req, res) => {
-  const tasks = readJson(TASKS_FILE, []);
-  const id = req.params.id;
-  const index = tasks.findIndex((t: any) => String(t.id) === id);
-  
-  if (index !== -1) {
-    tasks[index] = { ...tasks[index], ...req.body };
-    writeJson(TASKS_FILE, tasks);
-    res.json(tasks[index]);
-  } else {
-    res.status(404).json({ error: "Task not found" });
-  }
-});
-
-app.delete("/api/tasks/:id", (req, res) => {
-  const tasks = readJson(TASKS_FILE, []);
-  const id = req.params.id;
-  const newTasks = tasks.filter((t: any) => String(t.id) !== id);
-  writeJson(TASKS_FILE, newTasks);
-  res.json({ success: true });
-});
-
 // Settings
-app.get("/api/settings", (req, res) => {
-  const settings = readJson(SETTINGS_FILE, {});
+app.get("/api/settings", async (req, res) => {
+  const settings = await getSettingsFromFirebase();
   res.json(settings);
 });
 
-app.post("/api/settings", (req, res) => {
-  const settings = readJson(SETTINGS_FILE, {});
-  const newSettings = { ...settings, ...req.body };
-  writeJson(SETTINGS_FILE, newSettings);
-  res.json(newSettings);
+app.post("/api/settings", async (req, res) => {
+  await saveSettingsToFirebase(req.body);
+  res.json({ success: true });
 });
 
 app.post("/api/test-email", async (req, res) => {
@@ -212,12 +186,11 @@ app.post("/api/trigger-check", async (req, res) => {
 });
 
 app.get("/api/confirm-view", (req, res) => {
-  // Log confirmation
   console.log(`User ${req.query.email} confirmed view at ${new Date().toISOString()}`);
   res.send("<h1>Conferma ricevuta!</h1><p>Grazie per aver confermato la visione delle attività.</p>");
 });
 
-// Gemini Integration (Existing)
+// Gemini Integration
 app.post("/api/gemini/breakdown", async (req, res) => {
   const { taskDescription, files } = req.body;
   
@@ -314,8 +287,8 @@ app.post("/api/gemini/parse-task", async (req, res) => {
   }
 });
 
-app.get("/api/debug/env", (req, res) => {
-  const settings = readJson(SETTINGS_FILE, {});
+app.get("/api/debug/env", async (req, res) => {
+  const settings = await getSettingsFromFirebase();
   res.json({
     hasGemini: !!(process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY),
     hasSmtp: !!settings.smtpHost

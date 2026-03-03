@@ -643,9 +643,13 @@ function SettingsPanel() {
     const result = await api.testEmail(email);
     setLoading(false);
     if (result.success) {
-      alert("Email di test inviata! Controlla la tua casella di posta.");
+      if (result.simulated) {
+        alert("ATTENZIONE: L'email è stata solo SIMULATA perché mancano i dati SMTP (Host, Utente, Password). Compila i campi SMTP, salva le impostazioni e riprova.");
+      } else {
+        alert("Email di test inviata! Controlla la tua casella di posta (anche nello Spam).");
+      }
     } else {
-      alert(`Errore: ${result.error}\n${result.details || ""}`);
+      alert(`Errore durante l'invio: ${result.error}\nAssicurati che i dati SMTP e la Password per le App siano corretti.`);
     }
   };
 
