@@ -88,14 +88,21 @@ const sendEmail = async (to: string, subject: string, html: string) => {
         user: settings.smtpUser,
         pass: settings.smtpPass,
       },
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     });
 
+    console.log(`[EMAIL] Attempting to send test email to ${to} via ${settings.smtpHost}...`);
+    
     await transporter.sendMail({
       from: `"Agente Pianificazione" <${settings.smtpUser}>`,
       to,
       subject,
       html,
     });
+    
+    console.log(`[EMAIL] Test email sent successfully to ${to}`);
     return { success: true };
   } catch (error: any) {
     console.error("Email error:", error);

@@ -194,12 +194,25 @@ const api = {
     await fetch("/api/cron", { method: "POST" });
   },
   testEmail: async (email: string) => {
-    const res = await fetch("/api/test-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
-    });
-    return res.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+
+    try {
+      const res = await fetch("/api/test-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return res.json();
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        return { success: false, error: "Il server SMTP non risponde (Timeout). Verifica l'Host e la Porta." };
+      }
+      throw e;
+    }
   },
   getEnvStatus: async () => {
     const res = await fetch("/api/debug/env");
@@ -757,6 +770,11 @@ function SettingsPanel() {
           <p className="text-xs text-gray-500">
             Riceverai notifiche 3 giorni prima della scadenza e il giorno stesso.
           </p>
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+            <p className="text-[11px] text-blue-800 leading-relaxed">
+              <strong>💡 Tip per Gmail:</strong> Se usi Gmail, usa <code>smtp.gmail.com</code> (Porta 465 o 587) e assicurati di usare una <strong>"Password per le App"</strong> invece della tua password normale.
+            </p>
+          </div>
         </div>
 
         <div className="pt-4 border-t space-y-3">
