@@ -652,23 +652,44 @@ function SettingsPanel() {
     }
 
     try {
+      console.log("Requesting notification permission...");
       const permission = await Notification.requestPermission();
       if (permission === "granted") {
-        // NOTE: You need to replace this with your actual VAPID key from Firebase Console
         const vapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI"; 
         
-        const token = await getToken(messaging, { vapidKey });
+        console.log("Registering service worker...");
+        // Ensure the service worker is registered and ready
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/'
+        });
+        
+        // Wait for the service worker to be active
+        await navigator.serviceWorker.ready;
+
+        console.log("Getting FCM token...");
+        const token = await getToken(messaging, { 
+          vapidKey,
+          serviceWorkerRegistration: registration
+        });
+
         if (token) {
+          console.log("Token received:", token);
           await api.registerPushToken(token);
           setPushEnabled(true);
           alert("Notifiche push attivate con successo!");
+        } else {
+          throw new Error("Nessun token ricevuto da Firebase.");
         }
       } else {
-        alert("Permesso negato per le notifiche.");
+        alert("Permesso negato per le notifiche. Controlla le impostazioni del browser.");
       }
     } catch (e: any) {
-      console.error("Push error:", e);
-      alert("Errore durante l'attivazione delle notifiche: " + e.message);
+      console.error("Push error details:", e);
+      let errorMsg = e.message;
+      if (e.code === 'messaging/token-subscribe-failed') {
+        errorMsg = "Errore di sottoscrizione (VAPID Key non valida o problema di rete). Assicurati che la chiave VAPID sia corretta e che il progetto Firebase abbia le API Cloud Messaging attive.";
+      }
+      alert("Errore durante l'attivazione delle notifiche: " + errorMsg);
     }
   };
 
