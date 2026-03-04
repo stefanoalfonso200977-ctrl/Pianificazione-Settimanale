@@ -1,15 +1,15 @@
 import { useState, useEffect, type FormEvent, type FC, type ChangeEvent } from "react";
 import { format, isSameDay, addDays, parseISO, differenceInCalendarDays, startOfWeek, endOfWeek, eachDayOfInterval, isToday, setMonth, setYear, getYear, getMonth } from "date-fns";
 import { it } from "date-fns/locale";
-import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database, ChevronLeft, ChevronRight, Plus, ListTodo, BookOpen, Maximize2 } from "lucide-react";
+import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database, ChevronLeft, ChevronRight, Plus, ListTodo, BookOpen, Maximize2, Bell } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "./lib/utils";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp } from "firebase/firestore";
-import { GoogleGenAI } from "@google/genai";
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, Timestamp, setDoc } from "firebase/firestore";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 // Firebase Setup
 const firebaseConfig = {
@@ -22,11 +22,22 @@ const firebaseConfig = {
 };
 
 let db: any = null;
+let messaging: any = null;
 
 const initFirebase = (config: any) => {
   try {
     const app = initializeApp(config);
     db = getFirestore(app);
+    
+    // Messaging only works in browser
+    if (typeof window !== 'undefined') {
+      try {
+        messaging = getMessaging(app);
+      } catch (e) {
+        console.warn("Messaging not supported in this browser");
+      }
+    }
+    
     console.log("Firebase initialized successfully");
     return true;
   } catch (e) {
@@ -155,27 +166,15 @@ const api = {
     }
   },
   researchTask: async (text: string) => {
-    // Keep client-side for now or move to backend if needed
-    // For simplicity, we'll keep the direct call here if key is available, 
-    // but ideally this should also be a backend route.
-    // Since the original code had it client-side with process.env, 
-    // we'll leave it or mock it. 
-    // Actually, let's use the backend breakdown route as a template if we needed it,
-    // but the user didn't ask to change this specific feature.
-    // However, process.env.GEMINI_API_KEY might not be available in client in production.
-    // Let's assume the user is okay with this part failing if not migrated, 
-    // but to be safe, let's just leave it as is for now as it wasn't the focus.
     try {
-       const apiKey = process.env.GEMINI_API_KEY;
-       if (!apiKey) throw new Error("API Key missing");
-       const ai = new GoogleGenAI({ apiKey });
-       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Research: ${text}`,
-        config: { tools: [{ googleSearch: {} }] }
-       });
-       return { content: response.text || "" };
+      const res = await fetch("/api/gemini/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      return res.json();
     } catch (e: any) {
+      console.error("Research error:", e);
       return { error: e.message };
     }
   },
@@ -205,6 +204,16 @@ const api = {
   getEnvStatus: async () => {
     const res = await fetch("/api/debug/env");
     return res.json();
+  },
+  registerPushToken: async (token: string) => {
+    if (db) {
+      const tokenRef = doc(db, "push_tokens", token);
+      await setDoc(tokenRef, {
+        token,
+        updatedAt: Timestamp.now(),
+        platform: navigator.userAgent
+      });
+    }
   }
 };
 
@@ -619,6 +628,7 @@ function SettingsPanel() {
   const [smtpPass, setSmtpPass] = useState("");
   const [loading, setLoading] = useState(false);
   const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean } | null>(null);
+  const [pushEnabled, setPushEnabled] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(data => {
@@ -629,7 +639,38 @@ function SettingsPanel() {
       setSmtpPass(data.smtpPass || "");
     });
     api.getEnvStatus().then(setEnvStatus);
+    
+    if ("Notification" in window) {
+      setPushEnabled(Notification.permission === "granted");
+    }
   }, []);
+
+  const handleEnablePush = async () => {
+    if (!messaging) {
+      alert("Le notifiche push non sono supportate in questo browser o la configurazione Firebase non è corretta.");
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === "granted") {
+        // NOTE: You need to replace this with your actual VAPID key from Firebase Console
+        const vapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI"; 
+        
+        const token = await getToken(messaging, { vapidKey });
+        if (token) {
+          await api.registerPushToken(token);
+          setPushEnabled(true);
+          alert("Notifiche push attivate con successo!");
+        }
+      } else {
+        alert("Permesso negato per le notifiche.");
+      }
+    } catch (e: any) {
+      console.error("Push error:", e);
+      alert("Errore durante l'attivazione delle notifiche: " + e.message);
+    }
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -729,6 +770,39 @@ function SettingsPanel() {
           >
             Salva Impostazioni
           </button>
+        </div>
+
+        <div className="pt-4 border-t space-y-3">
+          <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <Bell className="w-4 h-4 text-red-500" />
+            Notifiche Push Web
+          </h3>
+          <p className="text-xs text-gray-500">
+            Ricevi avvisi istantanei sul tuo dispositivo (PC o Smartphone) anche quando l'app è chiusa.
+          </p>
+          
+          <button
+            onClick={handleEnablePush}
+            disabled={pushEnabled}
+            className={cn(
+              "w-full text-center px-3 py-2 rounded-lg text-sm font-bold transition-colors border",
+              pushEnabled 
+                ? "bg-green-50 text-green-700 border-green-200 cursor-default" 
+                : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+            )}
+          >
+            {pushEnabled ? (
+              <span className="flex items-center justify-center gap-2">
+                <CheckCircle className="w-4 h-4" /> Notifiche Attive su questo dispositivo
+              </span>
+            ) : "Attiva Notifiche Push"}
+          </button>
+          
+          {!pushEnabled && (
+            <p className="text-[10px] text-gray-400 italic">
+              Nota: Richiede il supporto del browser e una configurazione VAPID valida in Firebase.
+            </p>
+          )}
         </div>
 
         <div className="pt-4 border-t space-y-3">

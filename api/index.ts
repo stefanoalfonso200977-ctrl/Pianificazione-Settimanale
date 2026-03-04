@@ -4,7 +4,9 @@ import { GoogleGenAI } from "@google/genai";
 import cron from "node-cron";
 import nodemailer from "nodemailer";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
+import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, Timestamp, query, where } from "firebase/firestore";
+import { getApps, initializeApp as initAdmin, cert } from 'firebase-admin/app';
+import { getMessaging as getAdminMessaging } from 'firebase-admin/messaging';
 
 const app = express();
 
@@ -23,6 +25,21 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
+
+// --- Firebase Admin Setup (for Push Notifications) ---
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    if (getApps().length === 0) {
+      initAdmin({
+        credential: cert(serviceAccount)
+      });
+      console.log("Firebase Admin initialized successfully");
+    }
+  } catch (e) {
+    console.error("Firebase Admin init error:", e);
+  }
+}
 
 const getSettingsFromFirebase = async () => {
   try {
@@ -52,12 +69,11 @@ const saveSettingsToFirebase = async (settings: any) => {
 const sendEmail = async (to: string, subject: string, html: string) => {
   const settings = await getSettingsFromFirebase();
   
-  if (!settings.smtpHost) {
-    console.log("--- EMAIL SIMULATION ---");
+  if (!settings.smtpHost || !settings.smtpUser || !settings.smtpPass) {
+    console.log("--- EMAIL SIMULATION (Missing SMTP Settings) ---");
     console.log(`To: ${to}`);
     console.log(`Subject: ${subject}`);
-    console.log(`Body: ${html}`);
-    console.log("------------------------");
+    console.log("-----------------------------------------------");
     return { success: true, simulated: true };
   }
 
@@ -87,7 +103,8 @@ const sendEmail = async (to: string, subject: string, html: string) => {
 
 // --- Cron Job (8:00 AM Rome Time) ---
 cron.schedule("0 8 * * *", async () => {
-  console.log("Running scheduled task check...");
+  const now = new Date().toLocaleString("it-IT", { timeZone: "Europe/Rome" });
+  console.log(`[CRON] Triggered at ${now} (Rome Time)`);
   await checkAndNotify();
 }, {
   timezone: "Europe/Rome"
@@ -97,7 +114,7 @@ const checkAndNotify = async () => {
   const settings = await getSettingsFromFirebase();
   if (!settings.email) {
     console.log("No notification email configured.");
-    return;
+    return { success: false, message: "Email non configurata nelle impostazioni." };
   }
 
   let tasks: any[] = [];
@@ -106,52 +123,107 @@ const checkAndNotify = async () => {
     tasks = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() }))
       .filter(doc => doc.id !== "_settings_");
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error fetching tasks for cron:", e);
-    return;
+    return { success: false, message: "Errore nel recupero delle attività: " + e.message };
   }
 
-  const today = new Date();
+  // Use a fixed date reference for "today" in Rome time
+  const now = new Date();
+  const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Europe/Rome" }); // YYYY-MM-DD
+  const today = new Date(todayStr);
   today.setHours(0, 0, 0, 0);
 
   const expiringTasks = tasks.filter((task: any) => {
     if (task.status === "completed" || !task.deadline) return false;
+    
+    // task.deadline is expected to be YYYY-MM-DD
     const deadline = new Date(task.deadline);
     deadline.setHours(0, 0, 0, 0);
     
     const diffTime = deadline.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     
     return diffDays >= 0 && diffDays <= 3;
   });
 
   if (expiringTasks.length === 0) {
-    console.log("No expiring tasks found.");
-    return;
+    console.log(`[CRON] No expiring tasks found for ${settings.email}.`);
+    return { success: true, message: "Nessuna attività in scadenza trovata per oggi." };
   }
+
+  console.log(`[CRON] Found ${expiringTasks.length} expiring tasks. Sending email to ${settings.email}...`);
 
   const tasksHtml = expiringTasks.map((t: any) => {
     const deadline = new Date(t.deadline);
-    const isToday = deadline.toDateString() === today.toDateString();
+    const isToday = deadline.getTime() === today.getTime();
     const color = isToday ? "red" : "black";
     const alert = isToday ? "<b style='color: red;'>[SCADENZA OGGI!]</b> " : "";
     
-    return `<li style="color: ${color};">
-      ${alert}<strong>${t.title}</strong> - ${t.deadline}
+    return `<li style="color: ${color}; margin-bottom: 10px;">
+      ${alert}<strong>${t.title}</strong> - Scadenza: ${t.deadline}
     </li>`;
   }).join("");
 
-  const confirmLink = `${process.env.APP_URL || "https://pianificazione-settimana.web.app"}/api/confirm-view?email=${encodeURIComponent(settings.email)}`;
+  const baseUrl = process.env.APP_URL || "https://ais-dev-urhce4mvgiy7clmu5iufas-422200347277.europe-west2.run.app";
+  const confirmLink = `${baseUrl}/api/confirm-view?email=${encodeURIComponent(settings.email)}`;
 
   const html = `
-    <h2>Riepilogo Attività in Scadenza</h2>
-    <p>Ciao, ecco le attività che scadono nei prossimi 3 giorni:</p>
-    <ul>${tasksHtml}</ul>
-    <p>Per favore, conferma di aver preso visione di queste attività cliccando il link qui sotto:</p>
-    <a href="${confirmLink}" style="padding: 10px 20px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 5px;">Conferma Visione</a>
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+      <h2 style="color: #212E42;">Riepilogo Attività in Scadenza</h2>
+      <p>Ciao, ecco le attività che scadono nei prossimi 3 giorni:</p>
+      <ul style="line-height: 1.6;">${tasksHtml}</ul>
+      <p>Per favore, conferma di aver preso visione di queste attività cliccando il pulsante qui sotto:</p>
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="${confirmLink}" style="display: inline-block; padding: 12px 24px; background-color: #212E42; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Conferma Visione</a>
+      </div>
+      <p style="font-size: 12px; color: #999; margin-top: 40px; border-top: 1px solid #eee; pt: 10px;">
+        Questa è una notifica automatica inviata dall'Agente Pianificazione.
+      </p>
+    </div>
   `;
 
-  await sendEmail(settings.email, "Agente Pianificazione: Attività in Scadenza", html);
+  const emailResult = await sendEmail(settings.email, "Agente Pianificazione: Attività in Scadenza", html);
+  
+  // --- Send Push Notifications ---
+  try {
+    const tokensSnapshot = await getDocs(collection(db, "push_tokens"));
+    const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
+    
+    if (tokens.length > 0 && getApps().length > 0) {
+      const message = {
+        notification: {
+          title: "Attività in Scadenza!",
+          body: `Hai ${expiringTasks.length} attività che scadono a breve.`
+        },
+        tokens: tokens,
+      };
+
+      const response = await getAdminMessaging().sendEachForMulticast(message);
+      console.log(`[PUSH] Successfully sent ${response.successCount} messages; ${response.failureCount} failed.`);
+      
+      // Optional: Cleanup invalid tokens
+      if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const errorCode = resp.error?.code;
+            if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
+              console.log(`[PUSH] Removing invalid token: ${tokens[idx]}`);
+              // deleteDoc(doc(db, "push_tokens", tokens[idx])); // Async cleanup
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[PUSH] Error sending notifications:", e);
+  }
+
+  return { 
+    success: emailResult.success, 
+    message: emailResult.success ? "Email inviata con successo." : "Errore invio email: " + emailResult.error,
+    taskCount: expiringTasks.length
+  };
 };
 
 // --- API Routes ---
@@ -184,8 +256,8 @@ app.post("/api/test-email", async (req, res) => {
 });
 
 app.post("/api/trigger-check", async (req, res) => {
-  await checkAndNotify();
-  res.json({ success: true, message: "Check triggered" });
+  const result = await checkAndNotify();
+  res.json(result);
 });
 
 app.get("/api/confirm-view", (req, res) => {
@@ -286,6 +358,36 @@ app.post("/api/gemini/parse-task", async (req, res) => {
     res.json(taskData);
   } catch (error: any) {
     console.error("Gemini Parse Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/gemini/research", async (req, res) => {
+  const { text } = req.body;
+  
+  try {
+    let apiKey = process.env.GEMINI_API_KEY || process.env.MY_GEMINI_KEY || "";
+    apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
+
+    if (!apiKey) {
+      return res.status(401).json({ error: "API Key mancante" });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Esegui una ricerca approfondita su: "${text}". 
+      Fornisci un riepilogo dettagliato, strutturato e facile da leggere. 
+      Usa il formato Markdown per la risposta.`,
+      config: { 
+        tools: [{ googleSearch: {} }] 
+      }
+    });
+    
+    res.json({ content: response.text || "" });
+  } catch (error: any) {
+    console.error("Gemini Research Error:", error);
     res.status(500).json({ error: error.message });
   }
 });
