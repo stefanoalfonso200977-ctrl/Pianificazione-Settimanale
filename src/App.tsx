@@ -385,8 +385,17 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className={cn("p-3.5 rounded-2xl border shadow-[0_2px_15px_rgb(0,0,0,0.02)] transition-all w-full group relative", cardColorClass)}
+        className={cn("p-3.5 rounded-2xl border shadow-[0_2px_15px_rgb(0,0,0,0.02)] transition-all w-full group relative overflow-hidden", cardColorClass)}
       >
+        <div className={cn(
+          "absolute top-0 bottom-0 right-0 w-0 group-hover:w-1.5 transition-all duration-300",
+          daysLeft < 0 ? "bg-gray-400" :
+          daysLeft <= 1 ? "bg-red-500" :
+          daysLeft === 2 ? "bg-orange-500" :
+          daysLeft === 3 ? "bg-yellow-500" :
+          "bg-emerald-500"
+        )} />
+        
         <div className="flex gap-3 items-start">
           {/* Checkbox Circle */}
           <button 
@@ -592,14 +601,38 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
                     Lista di Controllo
                   </h3>
                   <ul className="space-y-3">
-                    {task.subtasks.map((sub, i) => (
-                      <li key={i} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                        <div className="mt-1 w-5 h-5 rounded-full border-2 border-red-200 flex items-center justify-center shrink-0">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                        </div>
-                        <span className="text-gray-700 font-medium">{sub}</span>
-                      </li>
-                    ))}
+                    {task.subtasks.map((sub, i) => {
+                      const isChecked = sub.startsWith("[x] ");
+                      const text = isChecked ? sub.substring(4) : sub;
+                      
+                      return (
+                        <li 
+                          key={i} 
+                          className={cn(
+                            "flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer hover:bg-gray-100",
+                            isChecked ? "bg-gray-50 border-gray-100 opacity-60" : "bg-white border-gray-200"
+                          )}
+                          onClick={async () => {
+                            const newSubtasks = [...task.subtasks];
+                            if (isChecked) {
+                              newSubtasks[i] = text;
+                            } else {
+                              newSubtasks[i] = "[x] " + text;
+                            }
+                            await api.updateTask(task.id, { ...task, subtasks: newSubtasks });
+                            onUpdate();
+                          }}
+                        >
+                          <div className={cn(
+                            "mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                            isChecked ? "border-gray-400 bg-gray-400 text-white" : "border-red-200 bg-white"
+                          )}>
+                              {isChecked ? <CheckCircle className="w-3 h-3" /> : <div className="w-2.5 h-2.5 rounded-full bg-red-500" />}
+                          </div>
+                          <span className={cn("font-medium transition-all", isChecked ? "text-gray-500 line-through" : "text-gray-700")}>{text}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
@@ -1111,17 +1144,17 @@ export default function App() {
     : [];
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-gray-900 font-sans pb-20">
+    <div className="min-h-screen bg-[#f0f2f5] text-gray-900 font-sans pb-20">
       {/* Header */}
       <header className="bg-red-600 border-b border-red-700 sticky top-0 z-10 shadow-md">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-auto py-3 sm:py-0 sm:h-20 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
-          <div className="flex items-center gap-2 sm:gap-3 font-black text-lg sm:text-2xl text-white tracking-tighter w-full sm:w-auto justify-center sm:justify-start">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center text-red-600 shadow-lg shadow-red-800 shrink-0">
-              <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-auto py-2 sm:py-0 sm:h-16 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0">
+          <div className="flex items-center gap-2 sm:gap-3 font-black text-lg sm:text-xl text-white tracking-tighter w-full sm:w-auto justify-center sm:justify-start">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center text-red-600 shadow-lg shadow-red-800 shrink-0">
+              <CheckCircle className="w-5 h-5 sm:w-5 sm:h-5" />
             </div>
             <span className="truncate">Agente Pianificazione</span>
           </div>
-          <nav className="flex gap-1 bg-white p-1.5 rounded-2xl shadow-sm items-center w-full sm:w-auto justify-center overflow-x-auto">
+          <nav className="flex gap-1 bg-white p-1 rounded-xl shadow-sm items-center w-full sm:w-auto justify-center overflow-x-auto">
             {[
               { id: "home", icon: Home, label: "Home" },
               { id: "history", icon: History, label: "Storico" },
@@ -1131,22 +1164,22 @@ export default function App() {
                 key={item.id}
                 onClick={() => setView(item.id as any)}
                 className={cn(
-                  "px-3 sm:px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shrink-0",
+                  "px-3 sm:px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 text-xs font-bold shrink-0",
                   view === item.id ? "bg-red-600 text-white shadow-md" : "text-gray-500 hover:bg-gray-100 hover:text-red-600"
                 )}
               >
-                <item.icon className="w-4 h-4" />
+                <item.icon className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{item.label}</span>
               </button>
             ))}
-            <div className="w-px h-6 bg-gray-200 mx-1 hidden sm:block" />
+            <div className="w-px h-5 bg-gray-200 mx-1 hidden sm:block" />
             <button
               onClick={handleSendReport}
               disabled={isReporting}
-              className="px-3 sm:px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 active:scale-95 shrink-0"
+              className="px-3 sm:px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 active:scale-95 shrink-0"
               title="Invia Report Scadenze"
             >
-              <Mail className="w-4 h-4" />
+              <Mail className="w-3.5 h-3.5" />
               <span className="hidden md:inline">{isReporting ? "Invio..." : "Report"}</span>
             </button>
           </nav>
@@ -1418,7 +1451,7 @@ export default function App() {
                 }} className="space-y-4">
                   <div className="relative">
                     <textarea
-                      placeholder="Cosa devi organizzare? (es. 'Prenota ristorante per venerdì sera', 'Prepara presentazione per domani')"
+                      placeholder=""
                       className="w-full rounded-2xl border-gray-200 bg-gray-50 focus:bg-white focus:border-red-500 focus:ring-4 focus:ring-red-500/10 p-4 pl-4 min-h-[100px] border text-sm font-medium transition-all outline-none resize-none"
                       value={newTask.title}
                       onChange={e => setNewTask({ ...newTask, title: e.target.value })}
