@@ -621,22 +621,23 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
 };
 
 function SettingsPanel() {
-  const [email, setEmail] = useState("");
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpUser, setSmtpUser] = useState("");
-  const [smtpPass, setSmtpPass] = useState("");
+  const [email, setEmail] = useState(() => localStorage.getItem("settings_draft_email") || "");
+  const [smtpHost, setSmtpHost] = useState(() => localStorage.getItem("settings_draft_smtpHost") || "");
+  const [smtpPort, setSmtpPort] = useState(() => localStorage.getItem("settings_draft_smtpPort") || "587");
+  const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("settings_draft_smtpUser") || "");
+  const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("settings_draft_smtpPass") || "");
   const [loading, setLoading] = useState(false);
   const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean } | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(data => {
-      setEmail(data.email || "");
-      setSmtpHost(data.smtpHost || "");
-      setSmtpPort(String(data.smtpPort || "587"));
-      setSmtpUser(data.smtpUser || "");
-      setSmtpPass(data.smtpPass || "");
+      // Only overwrite if draft is empty or we just loaded
+      if (data.email && !email) setEmail(data.email);
+      if (data.smtpHost && !smtpHost) setSmtpHost(data.smtpHost);
+      if (data.smtpPort && smtpPort === "587") setSmtpPort(String(data.smtpPort));
+      if (data.smtpUser && !smtpUser) setSmtpUser(data.smtpUser);
+      if (data.smtpPass && !smtpPass) setSmtpPass(data.smtpPass);
     });
     api.getEnvStatus().then(setEnvStatus);
     
@@ -644,6 +645,13 @@ function SettingsPanel() {
       setPushEnabled(Notification.permission === "granted");
     }
   }, []);
+
+  // Persist drafts to localStorage
+  useEffect(() => { localStorage.setItem("settings_draft_email", email); }, [email]);
+  useEffect(() => { localStorage.setItem("settings_draft_smtpHost", smtpHost); }, [smtpHost]);
+  useEffect(() => { localStorage.setItem("settings_draft_smtpPort", smtpPort); }, [smtpPort]);
+  useEffect(() => { localStorage.setItem("settings_draft_smtpUser", smtpUser); }, [smtpUser]);
+  useEffect(() => { localStorage.setItem("settings_draft_smtpPass", smtpPass); }, [smtpPass]);
 
   const handleEnablePush = async () => {
     if (!messaging) {
@@ -719,8 +727,11 @@ function SettingsPanel() {
 
   return (
     <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto mt-8">
-      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-        <Settings className="w-5 h-5" /> Impostazioni Notifiche
+      <h2 className="text-xl font-semibold mb-4 flex items-center justify-between">
+        <span className="flex items-center gap-2"><Settings className="w-5 h-5" /> Impostazioni Notifiche</span>
+        <span className="text-[10px] font-normal text-gray-400 italic flex items-center gap-1">
+          <Database className="w-3 h-3" /> Bozza salvata localmente
+        </span>
       </h2>
       
       {!envStatus?.hasSmtp && (

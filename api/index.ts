@@ -58,8 +58,10 @@ const getSettingsFromFirebase = async () => {
 
 const saveSettingsToFirebase = async (settings: any) => {
   try {
+    console.log("[SETTINGS] Saving to Firebase:", settings);
     const docRef = doc(db, "tasks", "_settings_");
     await setDoc(docRef, settings, { merge: true });
+    console.log("[SETTINGS] Saved successfully");
   } catch (e) {
     console.error("Error saving settings to Firebase:", e);
   }
