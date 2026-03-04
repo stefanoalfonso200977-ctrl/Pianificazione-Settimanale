@@ -192,7 +192,8 @@ const api = {
     return res.ok;
   },
   triggerCheck: async () => {
-    await fetch("/api/cron", { method: "POST" });
+    const res = await fetch("/api/cron", { method: "POST" });
+    return res.json();
   },
   testEmail: async (email: string) => {
     const controller = new AbortController();
@@ -1009,6 +1010,23 @@ export default function App() {
   const [researchMode, setResearchMode] = useState(false);
   const [researchQuery, setResearchQuery] = useState("");
   const [pendingTaskTitle, setPendingTaskTitle] = useState("");
+  const [isReporting, setIsReporting] = useState(false);
+
+  const handleSendReport = async () => {
+    setIsReporting(true);
+    try {
+      const result = await api.triggerCheck();
+      if (result.success) {
+        alert(`Report inviato! ${result.taskCount} attività trovate in scadenza.`);
+      } else {
+        alert("Errore durante l'invio del report: " + result.message);
+      }
+    } catch (e: any) {
+      alert("Errore durante l'invio del report: " + e.message);
+    } finally {
+      setIsReporting(false);
+    }
+  };
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>, isNewTask: boolean, editFiles?: TaskFile[], setEditFiles?: (f: TaskFile[]) => void) => {
     const selectedFiles = e.target.files;
@@ -1103,7 +1121,7 @@ export default function App() {
             </div>
             Agente Pianificazione Lavoro
           </div>
-          <nav className="flex gap-1 bg-white p-1.5 rounded-2xl shadow-sm">
+          <nav className="flex gap-1 bg-white p-1.5 rounded-2xl shadow-sm items-center">
             {[
               { id: "home", icon: Home, label: "Home" },
               { id: "history", icon: History, label: "Storico" },
@@ -1121,6 +1139,16 @@ export default function App() {
                 <span className="hidden sm:inline">{item.label}</span>
               </button>
             ))}
+            <div className="w-px h-6 bg-gray-200 mx-1 hidden sm:block" />
+            <button
+              onClick={handleSendReport}
+              disabled={isReporting}
+              className="px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 active:scale-95"
+              title="Invia Report Scadenze"
+            >
+              <Mail className="w-4 h-4" />
+              <span className="hidden md:inline">{isReporting ? "Invio..." : "Report"}</span>
+            </button>
           </nav>
         </div>
       </header>
@@ -1150,7 +1178,7 @@ export default function App() {
                     L'agente controlla autonomamente ogni giorno alle 08:00
                   </div>
                 </div>
-                
+
                 {/* Horizontal Weekly Calendar */}
                 <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex-1 max-w-xl">
                   <div className="flex items-center justify-between mb-3">
