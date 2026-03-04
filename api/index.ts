@@ -184,41 +184,49 @@ const checkAndNotify = async () => {
     return diffDays >= 0 && diffDays <= 3;
   });
 
-  if (expiringTasks.length === 0) {
-    console.log(`[CRON] No expiring tasks found for ${settings.email}.`);
-    return { success: true, message: "Nessuna attività in scadenza trovata per oggi." };
-  }
-
-  console.log(`[CRON] Found ${expiringTasks.length} expiring tasks. Sending email to ${settings.email}...`);
-
-  const tasksHtml = expiringTasks.map((t: any) => {
-    const deadline = new Date(t.deadline);
-    const isToday = deadline.getTime() === today.getTime();
-    const color = isToday ? "red" : "black";
-    const alert = isToday ? "<b style='color: red;'>[SCADENZA OGGI!]</b> " : "";
-    
-    return `<li style="color: ${color}; margin-bottom: 10px;">
-      ${alert}<strong>${t.title}</strong> - Scadenza: ${t.deadline}
-    </li>`;
-  }).join("");
-
   const baseUrl = process.env.APP_URL || "https://ais-dev-urhce4mvgiy7clmu5iufas-422200347277.europe-west2.run.app";
   const confirmLink = `${baseUrl}/api/confirm-view?email=${encodeURIComponent(settings.email)}`;
 
-  const html = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
-      <h2 style="color: #212E42;">Riepilogo Attività in Scadenza</h2>
-      <p>Ciao, ecco le attività che scadono nei prossimi 3 giorni:</p>
-      <ul style="line-height: 1.6;">${tasksHtml}</ul>
-      <p>Per favore, conferma di aver preso visione di queste attività cliccando il pulsante qui sotto:</p>
-      <div style="text-align: center; margin-top: 30px;">
-        <a href="${confirmLink}" style="display: inline-block; padding: 12px 24px; background-color: #212E42; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Conferma Visione</a>
+  let html = "";
+  if (expiringTasks.length === 0) {
+    console.log(`[CRON] No expiring tasks found for ${settings.email}. Sending empty report.`);
+    html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #212E42;">Riepilogo Attività</h2>
+        <p>Non ci sono attività in scadenza per i prossimi tre giorni.</p>
+        <p style="font-size: 12px; color: #999; margin-top: 40px; border-top: 1px solid #eee; pt: 10px;">
+          Questa è una notifica automatica inviata dall'Agente Pianificazione.
+        </p>
       </div>
-      <p style="font-size: 12px; color: #999; margin-top: 40px; border-top: 1px solid #eee; pt: 10px;">
-        Questa è una notifica automatica inviata dall'Agente Pianificazione.
-      </p>
-    </div>
-  `;
+    `;
+  } else {
+    console.log(`[CRON] Found ${expiringTasks.length} expiring tasks. Sending email to ${settings.email}...`);
+    const tasksHtml = expiringTasks.map((t: any) => {
+      const deadline = new Date(t.deadline);
+      const isToday = deadline.getTime() === today.getTime();
+      const color = isToday ? "red" : "black";
+      const alert = isToday ? "<b style='color: red;'>[SCADENZA OGGI!]</b> " : "";
+      
+      return `<li style="color: ${color}; margin-bottom: 10px;">
+        ${alert}<strong>${t.title}</strong> - Scadenza: ${t.deadline}
+      </li>`;
+    }).join("");
+
+    html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #212E42;">Riepilogo Attività in Scadenza</h2>
+        <p>Ciao, ecco le attività che scadono nei prossimi 3 giorni:</p>
+        <ul style="line-height: 1.6;">${tasksHtml}</ul>
+        <p>Per favore, conferma di aver preso visione di queste attività cliccando il pulsante qui sotto:</p>
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${confirmLink}" style="display: inline-block; padding: 12px 24px; background-color: #212E42; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Conferma Visione</a>
+        </div>
+        <p style="font-size: 12px; color: #999; margin-top: 40px; border-top: 1px solid #eee; pt: 10px;">
+          Questa è una notifica automatica inviata dall'Agente Pianificazione.
+        </p>
+      </div>
+    `;
+  }
 
   const emailResult = await sendEmail(settings.email, "Agente Pianificazione: Attività in Scadenza", html);
   
