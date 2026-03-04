@@ -417,35 +417,35 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
                 {alertElement}
               </div>
 
-              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                 <button 
                   onClick={() => setShowFullScreen(true)}
-                  className="p-1 rounded-full hover:bg-emerald-50 text-gray-300 hover:text-emerald-500 transition-colors"
+                  className="p-1.5 sm:p-1 rounded-full hover:bg-emerald-50 text-gray-400 sm:text-gray-300 hover:text-emerald-500 transition-colors"
                   title="Espandi"
                 >
-                  <Maximize2 className="w-3.5 h-3.5" />
+                  <Maximize2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
                 <button 
                   onClick={handleGeminiBreakdown}
-                  className="p-1 rounded-full hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                  className="p-1.5 sm:p-1 rounded-full hover:bg-red-50 text-red-500 sm:text-red-400 hover:text-red-600 transition-colors"
                   title="Assistente AI"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
                 <button 
                   onClick={() => setIsEditing(true)} 
-                  className="p-1 rounded-full hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
+                  className="p-1.5 sm:p-1 rounded-full hover:bg-red-50 text-gray-400 sm:text-gray-300 hover:text-red-500 transition-colors"
                 >
-                  <Edit2 className="w-3.5 h-3.5" />
+                  <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
                 
                 {showDeleteConfirm ? (
-                  <div className="flex items-center gap-1 bg-red-50 rounded-full px-1 py-0.5 border border-red-100 ml-1">
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-0.5 rounded-full hover:bg-red-200 text-red-600">
-                      <CheckCircle className="w-3 h-3" />
+                  <div className="flex items-center gap-1 bg-red-50 rounded-full px-1.5 py-1 border border-red-100 ml-1">
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1 rounded-full hover:bg-red-200 text-red-600">
+                      <CheckCircle className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }} className="p-0.5 rounded-full hover:bg-gray-200 text-gray-500">
-                      <X className="w-3 h-3" />
+                    <button onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }} className="p-1 rounded-full hover:bg-gray-200 text-gray-500">
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ) : (
@@ -454,9 +454,9 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
                       e.stopPropagation();
                       setShowDeleteConfirm(true);
                     }} 
-                    className="p-1 rounded-full hover:bg-red-50 text-gray-400 hover:text-gray-600 transition-colors"
+                    className="p-1.5 sm:p-1 rounded-full hover:bg-red-50 text-gray-400 hover:text-gray-600 transition-colors"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                   </button>
                 )}
               </div>
@@ -758,10 +758,10 @@ function SettingsPanel() {
 
   return (
     <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto mt-8">
-      <h2 className="text-xl font-semibold mb-4 flex items-center justify-between">
-        <span className="flex items-center gap-2"><Settings className="w-5 h-5" /> Impostazioni Notifiche</span>
+      <h2 className="text-lg sm:text-xl font-semibold mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+        <span className="flex items-center gap-2"><Settings className="w-5 h-5 shrink-0" /> Impostazioni Notifiche</span>
         <span className="text-[10px] font-normal text-gray-400 italic flex items-center gap-1">
-          <Database className="w-3 h-3" /> Bozza salvata localmente
+          <Database className="w-3 h-3 shrink-0" /> Bozza salvata localmente
         </span>
       </h2>
       
@@ -809,7 +809,7 @@ function SettingsPanel() {
           <h3 className="text-sm font-medium text-gray-700">Configurazione Server Email (SMTP)</h3>
           <p className="text-xs text-gray-500 mb-2">Per inviare email reali, inserisci i dati del tuo provider email (es. Gmail). Se usi Gmail, devi generare una "Password per le app".</p>
           
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Host SMTP</label>
               <input type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.gmail.com" className="w-full rounded-lg border-gray-300 shadow-sm text-sm p-2 border" />
@@ -819,7 +819,7 @@ function SettingsPanel() {
               <input type="text" value={smtpPort} onChange={e => setSmtpPort(e.target.value)} placeholder="587" className="w-full rounded-lg border-gray-300 shadow-sm text-sm p-2 border" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Utente (Tua Email)</label>
               <input type="email" value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="tua@gmail.com" className="w-full rounded-lg border-gray-300 shadow-sm text-sm p-2 border" />
@@ -831,11 +831,11 @@ function SettingsPanel() {
           </div>
         </div>
 
-        <div className="pt-4 border-t flex items-center justify-between">
+        <div className="pt-4 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 sm:gap-0">
           <button
             onClick={handleTestEmail}
             disabled={loading}
-            className="text-sm text-gray-600 hover:text-red-600 flex items-center gap-2 disabled:opacity-50"
+            className="text-sm text-gray-600 hover:text-red-600 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50 p-2 sm:p-0 border border-gray-200 sm:border-transparent rounded-lg sm:rounded-none"
           >
             <Mail className="w-4 h-4" />
             Invia email di test
@@ -844,7 +844,7 @@ function SettingsPanel() {
           <button
             onClick={handleSave}
             disabled={loading}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50 w-full sm:w-auto"
           >
             Salva Impostazioni
           </button>
@@ -1114,14 +1114,14 @@ export default function App() {
     <div className="min-h-screen bg-[#fafafa] text-gray-900 font-sans pb-20">
       {/* Header */}
       <header className="bg-red-600 border-b border-red-700 sticky top-0 z-10 shadow-md">
-        <div className="max-w-5xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3 font-black text-2xl text-white tracking-tighter">
-            <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-red-600 shadow-lg shadow-red-800">
-              <CheckCircle className="w-6 h-6" />
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-auto py-3 sm:py-0 sm:h-20 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
+          <div className="flex items-center gap-2 sm:gap-3 font-black text-lg sm:text-2xl text-white tracking-tighter w-full sm:w-auto justify-center sm:justify-start">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center text-red-600 shadow-lg shadow-red-800 shrink-0">
+              <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            Agente Pianificazione Lavoro
+            <span className="truncate">Agente Pianificazione</span>
           </div>
-          <nav className="flex gap-1 bg-white p-1.5 rounded-2xl shadow-sm items-center">
+          <nav className="flex gap-1 bg-white p-1.5 rounded-2xl shadow-sm items-center w-full sm:w-auto justify-center overflow-x-auto">
             {[
               { id: "home", icon: Home, label: "Home" },
               { id: "history", icon: History, label: "Storico" },
@@ -1131,7 +1131,7 @@ export default function App() {
                 key={item.id}
                 onClick={() => setView(item.id as any)}
                 className={cn(
-                  "px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold",
+                  "px-3 sm:px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shrink-0",
                   view === item.id ? "bg-red-600 text-white shadow-md" : "text-gray-500 hover:bg-gray-100 hover:text-red-600"
                 )}
               >
@@ -1143,7 +1143,7 @@ export default function App() {
             <button
               onClick={handleSendReport}
               disabled={isReporting}
-              className="px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 active:scale-95"
+              className="px-3 sm:px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 active:scale-95 shrink-0"
               title="Invia Report Scadenze"
             >
               <Mail className="w-4 h-4" />
@@ -1430,8 +1430,8 @@ export default function App() {
                         }
                       }}
                     />
-                    <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100">
-                      <label className="cursor-pointer px-3 py-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-red-600 transition-all flex items-center justify-center" title="Allega file">
+                    <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 flex items-center gap-1 bg-white p-1 sm:p-1.5 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100">
+                      <label className="cursor-pointer px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-gray-500 hover:bg-gray-100 hover:text-red-600 transition-all flex items-center justify-center" title="Allega file">
                         <Paperclip className="w-4 h-4" />
                         <input 
                           type="file" 
@@ -1458,26 +1458,26 @@ export default function App() {
                             setNewTask({ title: "", description: "", deadline: format(new Date(), "yyyy-MM-dd"), files: [] });
                             refreshTasks();
                           }}
-                          className="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-red-600 font-bold text-xs transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                          className="px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-gray-500 hover:bg-gray-100 hover:text-red-600 font-bold text-[10px] sm:text-xs transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 sm:gap-2"
                           title={`Aggiungi per il ${format(selectedDate || new Date(), "d MMMM", { locale: it })}`}
                         >
                           <Plus className="w-3 h-3" />
-                          Inserisci
+                          <span className="hidden sm:inline">Inserisci</span>
                         </button>
 
                         <button
                           type="submit"
                           disabled={isParsing || !newTask.title}
-                          className="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-red-600 font-bold text-xs transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                          className="px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-gray-500 hover:bg-gray-100 hover:text-red-600 font-bold text-[10px] sm:text-xs transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1 sm:gap-2"
                         >
                           {isParsing ? (
                             <>
                               <div className="w-3 h-3 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
-                              Analisi...
+                              <span className="hidden sm:inline">Analisi...</span>
                             </>
                           ) : (
                             <>
-                              AI <Sparkles className="w-3 h-3" />
+                              <span className="hidden sm:inline">AI</span> <Sparkles className="w-3 h-3" />
                             </>
                           )}
                         </button>
