@@ -4,5 +4,11 @@
       "path": "/api/cron",
       "schedule": "0 7 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    }
   ]
 }
