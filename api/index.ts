@@ -30,7 +30,12 @@ const db = getFirestore(firebaseApp);
 // --- Firebase Admin Setup (for Push Notifications) ---
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    let serviceAccountData = process.env.FIREBASE_SERVICE_ACCOUNT;
+    // Handle cases where the JSON might be wrapped in quotes or have escaped newlines
+    if (serviceAccountData.startsWith("'") || serviceAccountData.startsWith("\"")) {
+      serviceAccountData = serviceAccountData.substring(1, serviceAccountData.length - 1);
+    }
+    const serviceAccount = JSON.parse(serviceAccountData);
     if (getApps().length === 0) {
       initAdmin({
         credential: cert(serviceAccount)
