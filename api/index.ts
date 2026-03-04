@@ -7,6 +7,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, Timestamp, query, where } from "firebase/firestore";
 import { getApps, initializeApp as initAdmin, cert } from 'firebase-admin/app';
 import { getMessaging as getAdminMessaging } from 'firebase-admin/messaging';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
 const app = express();
 
@@ -43,11 +44,19 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 const getSettingsFromFirebase = async () => {
   try {
-    // Use the 'tasks' collection to bypass potential Firestore security rules that only allow access to 'tasks'
-    const docRef = doc(db, "tasks", "_settings_");
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data();
+    if (getApps().length > 0) {
+      const adminDb = getAdminFirestore();
+      const docSnap = await adminDb.collection("tasks").doc("_settings_").get();
+      if (docSnap.exists) {
+        return docSnap.data();
+      }
+    } else {
+      // Fallback to client SDK if admin not initialized (local dev without service account)
+      const docRef = doc(db, "tasks", "_settings_");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data();
+      }
     }
     return {};
   } catch (e) {
@@ -59,11 +68,18 @@ const getSettingsFromFirebase = async () => {
 const saveSettingsToFirebase = async (settings: any) => {
   try {
     console.log("[SETTINGS] Saving to Firebase:", settings);
-    const docRef = doc(db, "tasks", "_settings_");
-    await setDoc(docRef, settings, { merge: true });
+    if (getApps().length > 0) {
+      const adminDb = getAdminFirestore();
+      await adminDb.collection("tasks").doc("_settings_").set(settings, { merge: true });
+    } else {
+      // Fallback to client SDK
+      const docRef = doc(db, "tasks", "_settings_");
+      await setDoc(docRef, settings, { merge: true });
+    }
     console.log("[SETTINGS] Saved successfully");
   } catch (e) {
     console.error("Error saving settings to Firebase:", e);
+    throw e; // Rethrow to allow the route handler to catch it
   }
 };
 
@@ -257,8 +273,13 @@ app.get("/api/settings", async (req, res) => {
 });
 
 app.post("/api/settings", async (req, res) => {
-  await saveSettingsToFirebase(req.body);
-  res.json({ success: true });
+  try {
+    await saveSettingsToFirebase(req.body);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Settings Save Error:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post("/api/test-email", async (req, res) => {

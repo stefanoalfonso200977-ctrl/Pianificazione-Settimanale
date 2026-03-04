@@ -184,11 +184,12 @@ const api = {
     return res.json();
   },
   saveSettings: async (settings: any) => {
-    await fetch("/api/settings", {
+    const res = await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings)
     });
+    return res.ok;
   },
   triggerCheck: async () => {
     await fetch("/api/cron", { method: "POST" });
@@ -716,10 +717,20 @@ function SettingsPanel() {
 
   const handleSave = async () => {
     setLoading(true);
-    await api.saveSettings({ email, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass });
-    setEnvStatus(prev => ({ ...prev, hasSmtp: !!smtpHost }));
-    setLoading(false);
-    alert("Impostazioni salvate!");
+    try {
+      const success = await api.saveSettings({ email, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass });
+      if (success) {
+        setEnvStatus(prev => ({ ...prev, hasSmtp: !!smtpHost }));
+        alert("Impostazioni salvate correttamente nel cloud!");
+      } else {
+        alert("Errore durante il salvataggio. Controlla la console o riprova.");
+      }
+    } catch (e: any) {
+      console.error("Save error:", e);
+      alert("Errore critico durante il salvataggio: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTestEmail = async () => {
