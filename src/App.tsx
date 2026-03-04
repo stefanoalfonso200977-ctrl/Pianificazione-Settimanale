@@ -66,6 +66,13 @@ interface Task {
   files?: TaskFile[];
 }
 
+interface QuickNote {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: any;
+}
+
 // API Service Wrapper (Hybrid: Firebase or Backend API)
 const api = {
   useFirebase: () => !!db,
@@ -152,6 +159,62 @@ const api = {
       return { error: e.message };
     }
   },
+
+  // Quick Notes API
+  getQuickNotes: async () => {
+    if (db) {
+      try {
+        const { getDocs, collection, query, orderBy } = await import("firebase/firestore");
+        const q = query(collection(db, "quick_notes"), orderBy("createdAt", "desc"));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as QuickNote[];
+      } catch (e) {
+        console.error("Error fetching notes:", e);
+        return [];
+      }
+    }
+    // Local storage fallback
+    const localNotes = localStorage.getItem("quick_notes");
+    return localNotes ? JSON.parse(localNotes) : [];
+  },
+  
+  addQuickNote: async (text: string) => {
+    if (db) {
+      await addDoc(collection(db, "quick_notes"), {
+        text,
+        completed: false,
+        createdAt: Timestamp.now()
+      });
+      return;
+    }
+    // Local storage fallback
+    const localNotes = JSON.parse(localStorage.getItem("quick_notes") || "[]");
+    const newNote = { id: Date.now().toString(), text, completed: false, createdAt: new Date() };
+    localStorage.setItem("quick_notes", JSON.stringify([newNote, ...localNotes]));
+  },
+  
+  updateQuickNote: async (id: string, updates: Partial<QuickNote>) => {
+    if (db) {
+      const docRef = doc(db, "quick_notes", id);
+      await updateDoc(docRef, updates);
+      return;
+    }
+    // Local storage fallback
+    const localNotes = JSON.parse(localStorage.getItem("quick_notes") || "[]");
+    const updatedNotes = localNotes.map((n: QuickNote) => n.id === id ? { ...n, ...updates } : n);
+    localStorage.setItem("quick_notes", JSON.stringify(updatedNotes));
+  },
+  
+  deleteQuickNote: async (id: string) => {
+    if (db) {
+      await deleteDoc(doc(db, "quick_notes", id));
+      return;
+    }
+    // Local storage fallback
+    const localNotes = JSON.parse(localStorage.getItem("quick_notes") || "[]");
+    const updatedNotes = localNotes.filter((n: QuickNote) => n.id !== id);
+    localStorage.setItem("quick_notes", JSON.stringify(updatedNotes));
+  },
   parseTask: async (text: string, currentDate: string) => {
     try {
       const res = await fetch("/api/gemini/parse-task", {
@@ -237,6 +300,7 @@ const api = {
 const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; handleFileUpload?: any; removeFile?: any }> = ({ task, onUpdate, onDelete, handleFileUpload, removeFile }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [editDesc, setEditDesc] = useState(task.description);
   const [editDeadline, setEditDeadline] = useState(task.deadline);
@@ -295,6 +359,7 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
       return;
     }
     
+    setIsBreakingDown(true);
     try {
       const result = await api.breakdownTask(task.description || task.title, task.files);
       
@@ -309,6 +374,8 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
     } catch (err: any) {
       console.error("Errore Gemini:", err);
       alert(`Errore durante la comunicazione con Gemini: ${err.message || "Riprova più tardi."}`);
+    } finally {
+      setIsBreakingDown(false);
     }
   };
 
@@ -436,10 +503,11 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
                 </button>
                 <button 
                   onClick={handleGeminiBreakdown}
-                  className="p-1.5 sm:p-1 rounded-full hover:bg-red-50 text-red-500 sm:text-red-400 hover:text-red-600 transition-colors"
+                  disabled={isBreakingDown}
+                  className={cn("p-1.5 sm:p-1 rounded-full hover:bg-red-50 text-red-500 sm:text-red-400 hover:text-red-600 transition-colors", isBreakingDown && "opacity-50 cursor-not-allowed")}
                   title="Assistente AI"
                 >
-                  <Sparkles className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                  <Sparkles className={cn("w-4 h-4 sm:w-3.5 sm:h-3.5", isBreakingDown && "animate-spin")} />
                 </button>
                 <button 
                   onClick={() => setIsEditing(true)} 
@@ -670,18 +738,20 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
 
 function SettingsPanel() {
   const [email, setEmail] = useState(() => localStorage.getItem("settings_draft_email") || "");
+  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("settings_draft_geminiApiKey") || "");
   const [smtpHost, setSmtpHost] = useState(() => localStorage.getItem("settings_draft_smtpHost") || "");
   const [smtpPort, setSmtpPort] = useState(() => localStorage.getItem("settings_draft_smtpPort") || "587");
   const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("settings_draft_smtpUser") || "");
   const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("settings_draft_smtpPass") || "");
   const [loading, setLoading] = useState(false);
-  const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean; hasServiceAccount: boolean } | null>(null);
+  const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean; hasServiceAccount: boolean; hasGemini: boolean } | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(data => {
       // Only overwrite if draft is empty or we just loaded
       if (data.email && !email) setEmail(data.email);
+      if (data.geminiApiKey && !geminiApiKey) setGeminiApiKey(data.geminiApiKey);
       if (data.smtpHost && !smtpHost) setSmtpHost(data.smtpHost);
       if (data.smtpPort && smtpPort === "587") setSmtpPort(String(data.smtpPort));
       if (data.smtpUser && !smtpUser) setSmtpUser(data.smtpUser);
@@ -696,6 +766,7 @@ function SettingsPanel() {
 
   // Persist drafts to localStorage
   useEffect(() => { localStorage.setItem("settings_draft_email", email); }, [email]);
+  useEffect(() => { localStorage.setItem("settings_draft_geminiApiKey", geminiApiKey); }, [geminiApiKey]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpHost", smtpHost); }, [smtpHost]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpPort", smtpPort); }, [smtpPort]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpUser", smtpUser); }, [smtpUser]);
@@ -711,6 +782,9 @@ function SettingsPanel() {
       console.log("Requesting notification permission...");
       const permission = await Notification.requestPermission();
       if (permission === "granted") {
+        // VAPID Key for Firebase Cloud Messaging
+        // Note: This key should ideally be fetched from the backend or env vars, but for this demo it's hardcoded.
+        // If you regenerate keys in Firebase Console, update this.
         const vapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI"; 
         
         console.log("Registering service worker...");
@@ -755,11 +829,11 @@ function SettingsPanel() {
       const response = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass })
+        body: JSON.stringify({ email, geminiApiKey, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass })
       });
       
       if (response.ok) {
-        setEnvStatus(prev => ({ ...prev, hasSmtp: !!smtpHost }));
+        setEnvStatus(prev => prev ? ({ ...prev, hasSmtp: !!smtpHost, hasGemini: !!geminiApiKey || prev.hasGemini }) : null);
         alert("Impostazioni salvate correttamente nel cloud!");
       } else {
         const errorData = await response.json();
@@ -792,12 +866,22 @@ function SettingsPanel() {
   return (
     <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto mt-8">
       <h2 className="text-lg sm:text-xl font-semibold mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-        <span className="flex items-center gap-2"><Settings className="w-5 h-5 shrink-0" /> Impostazioni Notifiche</span>
+        <span className="flex items-center gap-2"><Settings className="w-5 h-5 shrink-0" /> Impostazioni</span>
         <span className="text-[10px] font-normal text-gray-400 italic flex items-center gap-1">
           <Database className="w-3 h-3 shrink-0" /> Bozza salvata localmente
         </span>
       </h2>
       
+      {!envStatus?.hasGemini && !geminiApiKey && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="text-xs text-red-800 space-y-1">
+            <p className="font-bold">Gemini API Key mancante</p>
+            <p>L'intelligenza artificiale non funzionerà. Inserisci una chiave API valida qui sotto o configurala nelle variabili d'ambiente.</p>
+          </div>
+        </div>
+      )}
+
       {!envStatus?.hasSmtp && (
         <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex gap-3 items-start">
           <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
@@ -820,6 +904,20 @@ function SettingsPanel() {
 
       <div className="space-y-4">
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Gemini API Key (Google AI)</label>
+          <input
+            type="password"
+            value={geminiApiKey}
+            onChange={(e) => setGeminiApiKey(e.target.value)}
+            className="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm p-2 border mb-1"
+            placeholder="AIza..."
+          />
+          <p className="text-xs text-gray-500">
+            Necessaria per l'analisi dei task e la ricerca. <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-red-600 underline">Ottieni una chiave qui</a>.
+          </p>
+        </div>
+
+        <div className="pt-4 border-t">
           <label className="block text-sm font-medium text-gray-700 mb-1">Email per le notifiche</label>
           <input
             type="email"
@@ -1027,8 +1125,117 @@ function SettingsPanel() {
   );
 }
 
+const QuickNotesBoard = () => {
+  const [notes, setNotes] = useState<QuickNote[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+
+  const loadNotes = async () => {
+    const fetched = await api.getQuickNotes();
+    setNotes(fetched);
+  };
+
+  useEffect(() => {
+    loadNotes();
+    // Realtime listener for notes
+    if (db) {
+      const q = query(collection(db, "quick_notes"), orderBy("createdAt", "desc"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const updatedNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as QuickNote[];
+        setNotes(updatedNotes);
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
+  const handleAdd = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newNote.trim()) return;
+    setIsAdding(true);
+    await api.addQuickNote(newNote);
+    setNewNote("");
+    setIsAdding(false);
+  };
+
+  const toggleNote = async (note: QuickNote) => {
+    await api.updateQuickNote(note.id, { completed: !note.completed });
+  };
+
+  const deleteNote = async (id: string) => {
+    if (confirm("Eliminare questa nota?")) {
+      await api.deleteQuickNote(id);
+    }
+  };
+
+  return (
+    <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col h-full min-h-[300px]">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-gray-800 flex items-center gap-2">
+          <div className="p-1.5 bg-yellow-100 rounded-lg text-yellow-600">
+            <ListTodo className="w-4 h-4" />
+          </div>
+          Bacheca
+        </h3>
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+          {format(new Date(), "d MMM", { locale: it })}
+        </span>
+      </div>
+
+      <form onSubmit={handleAdd} className="mb-4 relative">
+        <input
+          type="text"
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          placeholder="Aggiungi nota veloce..."
+          className="w-full pl-3 pr-10 py-2.5 bg-gray-50 border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500/20 focus:bg-white transition-all"
+        />
+        <button 
+          type="submit" 
+          disabled={!newNote.trim() || isAdding}
+          className="absolute right-1.5 top-1.5 p-1.5 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </form>
+
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+        {notes.length === 0 && (
+          <div className="text-center py-8 text-gray-400 text-xs italic">
+            Nessuna nota in bacheca
+          </div>
+        )}
+        {notes.map(note => (
+          <div key={note.id} className="group flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
+            <button 
+              onClick={() => toggleNote(note)}
+              className={cn(
+                "mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all",
+                note.completed ? "bg-yellow-500 border-yellow-500 text-white" : "border-gray-300 hover:border-yellow-500"
+              )}
+            >
+              {note.completed && <CheckCircle className="w-2.5 h-2.5" />}
+            </button>
+            <span className={cn(
+              "text-sm flex-1 break-words leading-tight transition-all",
+              note.completed ? "text-gray-400 line-through" : "text-gray-700"
+            )}>
+              {note.text}
+            </span>
+            <button 
+              onClick={() => deleteNote(note.id)}
+              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
-  const [view, setView] = useState<"home" | "calendar" | "history" | "settings">("home");
+  const [view, setView] = useState<"home" | "calendar" | "history" | "settings" | "bacheca">("home");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isParsing, setIsParsing] = useState(false);
   const [newTask, setNewTask] = useState<{title: string, description: string, deadline: string, files: TaskFile[]}>({ 
@@ -1157,6 +1364,7 @@ export default function App() {
           <nav className="flex gap-1 bg-white p-1 rounded-xl shadow-sm items-center w-full sm:w-auto justify-center overflow-x-auto">
             {[
               { id: "home", icon: Home, label: "Home" },
+              { id: "bacheca", icon: ListTodo, label: "Bacheca" },
               { id: "history", icon: History, label: "Storico" },
               { id: "settings", icon: Settings, label: "Impostazioni" },
             ].map((item) => (
@@ -1321,109 +1529,59 @@ export default function App() {
                 
                 {showAgentOptions && (
                     <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-200">
-                      {!researchMode ? (
-                        <>
-                          <h3 className="text-lg font-bold text-gray-800 mb-2">Come vuoi procedere?</h3>
-                          <p className="text-sm text-gray-500 mb-6 max-w-xs">
-                            Posso pianificare questa attività o fare una ricerca per te.
-                          </p>
-                          
-                          <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
-                            <button
-                              onClick={async () => {
-                                setShowAgentOptions(false);
-                                setIsParsing(true);
-                                const parsed = await api.parseTask(pendingTaskTitle, format(new Date(), "yyyy-MM-dd"));
-                                setIsParsing(false);
-                                
-                                if (parsed && !parsed.error) {
-                                  await api.createTask({
-                                    title: parsed.title || pendingTaskTitle,
-                                    description: parsed.description || "",
-                                    deadline: parsed.deadline || format(new Date(), "yyyy-MM-dd"),
-                                    subtasks: parsed.subtasks || [],
-                                    files: newTask.files
-                                  });
-                                  setNewTask({ title: "", description: "", deadline: format(new Date(), "yyyy-MM-dd"), files: [] });
-                                  refreshTasks();
-                                }
-                              }}
-                              className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-red-50 border-2 border-red-100 text-red-700 hover:bg-red-100 hover:border-red-200 transition-all group"
-                            >
-                              <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                                <ListTodo className="w-5 h-5" />
-                              </div>
-                              <span className="font-bold text-sm">Pianifica e Dividi</span>
-                            </button>
-                            
-                            <button
-                              onClick={() => {
-                                setResearchMode(true);
-                                setResearchQuery(pendingTaskTitle);
-                              }}
-                              className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-100 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-200 transition-all group"
-                            >
-                              <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                                <BookOpen className="w-5 h-5" />
-                              </div>
-                              <span className="font-bold text-sm">Fai una Ricerca</span>
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <h3 className="text-lg font-bold text-gray-800 mb-2">In cosa posso aiutarti?</h3>
-                          <p className="text-sm text-gray-500 mb-4 max-w-xs">
-                            Descrivi cosa vuoi che cerchi o approfondisca per te.
-                          </p>
-                          
-                          <textarea
-                            value={researchQuery}
-                            onChange={(e) => setResearchQuery(e.target.value)}
-                            className="w-full max-w-sm p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 min-h-[80px] resize-none"
-                            placeholder="Es. Cerca i migliori hotel a Tokyo..."
-                            autoFocus
-                          />
-                          
-                          <button
-                            onClick={async () => {
-                              setShowAgentOptions(false);
-                              setResearchMode(false);
-                              setIsParsing(true);
-                              const research = await api.researchTask(researchQuery);
-                              setIsParsing(false);
+                      <h3 className="text-lg font-bold text-gray-800 mb-2">Assistente AI</h3>
+                      <p className="text-sm text-gray-500 mb-6 max-w-xs">
+                        Vuoi attivare l'intelligenza artificiale per analizzare questa attività?
+                      </p>
+                      
+                      <div className="flex flex-col gap-3 w-full max-w-xs">
+                        <button
+                          onClick={async () => {
+                            setShowAgentOptions(false);
+                            setIsParsing(true);
+                            try {
+                              // Use parseTask which handles breakdown/analysis
+                              const parsed = await api.parseTask(pendingTaskTitle, format(new Date(), "yyyy-MM-dd"));
                               
-                              if (research && !research.content) {
-                                alert("Errore durante la ricerca: " + (research.error || "Nessun risultato"));
+                              if (parsed && parsed.error) {
+                                alert("Errore durante l'analisi: " + parsed.error);
+                                setIsParsing(false);
                                 return;
                               }
                               
-                              await api.createTask({
-                                  title: `Ricerca: ${researchQuery.length > 30 ? researchQuery.substring(0, 30) + "..." : researchQuery}`,
-                                  description: research.content,
-                                  deadline: format(selectedDate || new Date(), "yyyy-MM-dd"),
+                              if (parsed) {
+                                await api.createTask({
+                                  title: parsed.title || pendingTaskTitle,
+                                  description: parsed.description || "",
+                                  deadline: parsed.deadline || format(new Date(), "yyyy-MM-dd"),
+                                  subtasks: parsed.subtasks || [],
                                   files: newTask.files
-                              });
-                              setNewTask({ title: "", description: "", deadline: format(new Date(), "yyyy-MM-dd"), files: [] });
-                              refreshTasks();
-                            }}
-                            disabled={!researchQuery.trim()}
-                            className="w-full max-w-sm py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                          >
-                            Avvia Ricerca <Sparkles className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                      
-                      <button 
-                        onClick={() => {
-                          setShowAgentOptions(false);
-                          setResearchMode(false);
-                        }}
-                        className="mt-6 text-xs font-bold text-gray-400 hover:text-gray-600 underline"
-                      >
-                        Annulla
-                      </button>
+                                });
+                                setNewTask({ title: "", description: "", deadline: format(new Date(), "yyyy-MM-dd"), files: [] });
+                                refreshTasks();
+                              }
+                            } catch (e: any) {
+                              alert("Errore imprevisto: " + e.message);
+                            } finally {
+                              setIsParsing(false);
+                            }
+                          }}
+                          className="flex items-center justify-center gap-2 p-3 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span className="font-bold text-sm">Attiva Intelligenza Artificiale</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            setShowAgentOptions(false);
+                            setResearchMode(false);
+                          }}
+                          className="p-3 rounded-xl text-gray-500 hover:bg-gray-100 font-medium text-sm transition-colors"
+                        >
+                          Annulla
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1510,7 +1668,7 @@ export default function App() {
                             </>
                           ) : (
                             <>
-                              <span className="hidden sm:inline">AI</span> <Sparkles className="w-3 h-3" />
+                              <span className="hidden sm:inline">Attiva AI</span> <Sparkles className="w-3 h-3" />
                             </>
                           )}
                         </button>
@@ -1633,6 +1791,18 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {view === "bacheca" && (
+            <motion.div
+              key="bacheca"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-2xl mx-auto"
+            >
+              <QuickNotesBoard />
             </motion.div>
           )}
 

@@ -271,13 +271,73 @@ const checkAndNotify = async () => {
   };
 };
 
+// Helper to get a valid API Key
+const getValidApiKey = async () => {
+  const knownFirebaseKey = "AIzaSyAiYIjjUQWY5QrMwHeSHyGuWSbZzeUeB-U";
+  
+  // 0. Check Firebase Settings (User configured via UI)
+  try {
+    const settings = await getSettingsFromFirebase();
+    if (settings.geminiApiKey) {
+      const cleanKey = settings.geminiApiKey.trim();
+      if (cleanKey && cleanKey !== knownFirebaseKey && cleanKey.length > 20) {
+        console.log("[GEMINI] Using API Key from Firebase Settings");
+        return cleanKey;
+      }
+    }
+  } catch (e) {
+    console.warn("[GEMINI] Failed to fetch settings for API Key check", e);
+  }
+
+  // 1. Check specific prioritized keys first
+  const specificKeys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GOOGLE_API_KEY,
+    process.env.MY_GEMINI_KEY,
+    process.env.API_KEY
+  ];
+  
+  for (let key of specificKeys) {
+    if (!key) continue;
+    const cleanKey = key.replace(/^["']|["']$/g, '').trim();
+    if (cleanKey === knownFirebaseKey) continue;
+    
+    if (cleanKey.startsWith("AIza") && cleanKey.length > 20) {
+      return cleanKey;
+    }
+  }
+
+  // 2. Scan ALL environment variables for a potential key
+  // This helps if the user named it something else (e.g., VITE_GEMINI_API_KEY)
+  console.log("[GEMINI] Scanning all environment variables for a valid key...");
+  for (const [keyName, value] of Object.entries(process.env)) {
+    if (!value || typeof value !== 'string') continue;
+    
+    // Skip known non-API key variables to save time/logs
+    if (keyName.includes("FIREBASE") || keyName.includes("URL") || keyName.includes("PATH")) continue;
+
+    const cleanValue = value.replace(/^["']|["']$/g, '').trim();
+    
+    if (cleanValue === knownFirebaseKey) continue;
+
+    // Strict check for Google API Key format (AIza...)
+    if (cleanValue.startsWith("AIza") && cleanValue.length > 35 && cleanValue.length < 45) {
+      console.log(`[GEMINI] Found potential key in variable: ${keyName}`);
+      return cleanValue;
+    }
+  }
+
+  return "";
+};
+
 // --- API Routes ---
 
-app.get("/api/health", (req, res) => {
+app.get("/api/health", async (req, res) => {
+  const apiKey = await getValidApiKey();
   res.json({ 
     status: "ok", 
     env: {
-      hasGemini: !!(process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY),
+      hasGemini: !!apiKey,
       region: process.env.VERCEL_REGION || "unknown"
     }
   });
@@ -328,11 +388,13 @@ app.post("/api/gemini/breakdown", async (req, res) => {
   const { taskDescription, files } = req.body;
   
   try {
-    let apiKey = process.env.GEMINI_API_KEY || process.env.MY_GEMINI_KEY || "";
-    apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
+    const apiKey = await getValidApiKey();
 
     if (!apiKey) {
-      return res.status(401).json({ error: "API Key mancante" });
+      console.error("[GEMINI] No valid API Key found in environment variables or settings");
+      return res.status(401).json({ error: "API Key mancante o non valida. Configurala nelle Impostazioni." });
+    } else {
+      console.log(`[GEMINI] Using API Key starting with: ${apiKey.substring(0, 4)}...`);
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -371,6 +433,14 @@ app.post("/api/gemini/breakdown", async (req, res) => {
     res.json({ subtasks });
   } catch (error: any) {
     console.error("Gemini Error:", error);
+    
+    // Handle Quota Exceeded Error
+    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+      return res.status(429).json({ 
+        error: "Quota API Gemini esaurita. Il piano gratuito ha dei limiti giornalieri. Riprova più tardi o usa una chiave API diversa nelle Impostazioni." 
+      });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
@@ -379,34 +449,50 @@ app.post("/api/gemini/parse-task", async (req, res) => {
   const { text, currentDate } = req.body;
   
   try {
-    let apiKey = process.env.GEMINI_API_KEY || process.env.MY_GEMINI_KEY || "";
-    apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
+    const apiKey = await getValidApiKey();
 
     if (!apiKey) {
-      return res.status(401).json({ error: "API Key mancante" });
+      console.error("[GEMINI] No valid API Key found in environment variables or settings");
+      return res.status(401).json({ error: "API Key mancante o non valida. Configurala nelle Impostazioni." });
+    } else {
+      console.log(`[GEMINI] Using API Key starting with: ${apiKey.substring(0, 4)}...`);
     }
 
     const ai = new GoogleGenAI({ apiKey });
 
-    let prompt = `Sei un assistente esperto di pianificazione.
+    let prompt = `Sei un assistente personale intelligente e capace.
     Oggi è il ${currentDate}.
-    Analizza la seguente richiesta dell'utente e crea un'attività strutturata.
-    Estrai un titolo conciso, una descrizione (se presente), una data di scadenza (formato YYYY-MM-DD) e 2-4 sotto-task se l'attività è complessa.
-    Se non viene specificata una data, usa la data di oggi.
     
-    Richiesta: "${text}"
+    Richiesta dell'utente: "${text}"
+
+    Il tuo compito è ESEGUIRE la richiesta dell'utente, non solo pianificarla.
     
+    1. Se l'utente chiede informazioni, una ricerca, o di scrivere qualcosa (es. "Cerca voli per Parigi", "Scrivi una mail a X", "Dammi una ricetta"):
+       - ESEGUI la ricerca o la generazione del testo.
+       - Metti il risultato dettagliato nel campo "description".
+       - Metti un titolo breve e chiaro nel campo "title".
+       - NON creare sotto-task se non richiesto esplicitamente.
+
+    2. Se l'utente vuole solo salvare un promemoria (es. "Comprare latte", "Riunione domani"):
+       - Estrai titolo, descrizione e data.
+       - NON creare sotto-task se non servono.
+
     Restituisci SOLO un oggetto JSON con questa struttura esatta, senza markdown o altro testo:
     {
       "title": "Titolo breve",
-      "description": "Descrizione opzionale",
+      "description": "Risultato della richiesta o descrizione",
       "deadline": "YYYY-MM-DD",
-      "subtasks": ["sotto-task 1", "sotto-task 2"]
-    }`;
+      "subtasks": [] 
+    }
+    
+    Se non viene specificata una data, usa la data di oggi.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
     });
     
     let responseText = response.text || "";
@@ -416,6 +502,14 @@ app.post("/api/gemini/parse-task", async (req, res) => {
     res.json(taskData);
   } catch (error: any) {
     console.error("Gemini Parse Error:", error);
+    
+    // Handle Quota Exceeded Error
+    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+      return res.status(429).json({ 
+        error: "Quota API Gemini esaurita. Il piano gratuito ha dei limiti giornalieri. Riprova più tardi o usa una chiave API diversa nelle Impostazioni." 
+      });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
@@ -424,11 +518,13 @@ app.post("/api/gemini/research", async (req, res) => {
   const { text } = req.body;
   
   try {
-    let apiKey = process.env.GEMINI_API_KEY || process.env.MY_GEMINI_KEY || "";
-    apiKey = apiKey.replace(/^["']|["']$/g, '').trim();
+    const apiKey = await getValidApiKey();
 
     if (!apiKey) {
-      return res.status(401).json({ error: "API Key mancante" });
+      console.error("[GEMINI] No valid API Key found in environment variables or settings");
+      return res.status(401).json({ error: "API Key mancante o non valida. Configurala nelle Impostazioni." });
+    } else {
+      console.log(`[GEMINI] Using API Key starting with: ${apiKey.substring(0, 4)}...`);
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -446,14 +542,23 @@ app.post("/api/gemini/research", async (req, res) => {
     res.json({ content: response.text || "" });
   } catch (error: any) {
     console.error("Gemini Research Error:", error);
+
+    // Handle Quota Exceeded Error
+    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+      return res.status(429).json({ 
+        error: "Quota API Gemini esaurita. Il piano gratuito ha dei limiti giornalieri. Riprova più tardi o usa una chiave API diversa nelle Impostazioni." 
+      });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
 
 app.get("/api/debug/env", async (req, res) => {
   const settings = await getSettingsFromFirebase();
+  const apiKey = await getValidApiKey();
   res.json({
-    hasGemini: !!(process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY),
+    hasGemini: !!apiKey,
     hasSmtp: !!settings.smtpHost,
     hasServiceAccount: !!process.env.FIREBASE_SERVICE_ACCOUNT
   });
