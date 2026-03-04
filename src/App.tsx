@@ -191,7 +191,7 @@ const api = {
     });
   },
   triggerCheck: async () => {
-    await fetch("/api/trigger-check", { method: "POST" });
+    await fetch("/api/cron", { method: "POST" });
   },
   testEmail: async (email: string) => {
     const res = await fetch("/api/test-email", {

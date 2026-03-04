@@ -102,13 +102,16 @@ const sendEmail = async (to: string, subject: string, html: string) => {
 };
 
 // --- Cron Job (8:00 AM Rome Time) ---
-cron.schedule("0 8 * * *", async () => {
-  const now = new Date().toLocaleString("it-IT", { timeZone: "Europe/Rome" });
-  console.log(`[CRON] Triggered at ${now} (Rome Time)`);
-  await checkAndNotify();
-}, {
-  timezone: "Europe/Rome"
-});
+// Only use node-cron if NOT on Vercel (Vercel uses vercel.json crons)
+if (!process.env.VERCEL) {
+  cron.schedule("0 8 * * *", async () => {
+    const now = new Date().toLocaleString("it-IT", { timeZone: "Europe/Rome" });
+    console.log(`[CRON] Triggered at ${now} (Rome Time)`);
+    await checkAndNotify();
+  }, {
+    timezone: "Europe/Rome"
+  });
+}
 
 const checkAndNotify = async () => {
   const settings = await getSettingsFromFirebase();
@@ -255,7 +258,15 @@ app.post("/api/test-email", async (req, res) => {
   res.json(result);
 });
 
-app.post("/api/trigger-check", async (req, res) => {
+app.all("/api/cron", async (req, res) => {
+  // Verify it's a Vercel Cron trigger or a manual POST
+  const isVercelCron = req.headers['x-vercel-cron'] === '1';
+  const isManualPost = req.method === 'POST';
+
+  if (!isVercelCron && !isManualPost) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const result = await checkAndNotify();
   res.json(result);
 });
