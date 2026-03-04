@@ -51,7 +51,6 @@ const getSettingsFromFirebase = async () => {
         return docSnap.data();
       }
     } else {
-      // Fallback to client SDK if admin not initialized (local dev without service account)
       const docRef = doc(db, "tasks", "_settings_");
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
@@ -59,7 +58,7 @@ const getSettingsFromFirebase = async () => {
       }
     }
     return {};
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error fetching settings from Firebase:", e);
     return {};
   }
@@ -67,19 +66,24 @@ const getSettingsFromFirebase = async () => {
 
 const saveSettingsToFirebase = async (settings: any) => {
   try {
-    console.log("[SETTINGS] Saving to Firebase:", settings);
+    console.log("[SETTINGS] Saving to Firebase...");
     if (getApps().length > 0) {
       const adminDb = getAdminFirestore();
       await adminDb.collection("tasks").doc("_settings_").set(settings, { merge: true });
+      console.log("[SETTINGS] Saved successfully via Admin SDK");
     } else {
-      // Fallback to client SDK
+      console.log("[SETTINGS] Admin SDK not initialized, falling back to Client SDK");
+      if (process.env.VERCEL) {
+        console.warn("[SETTINGS] Running on Vercel without FIREBASE_SERVICE_ACCOUNT. This may fail due to permissions.");
+      }
       const docRef = doc(db, "tasks", "_settings_");
       await setDoc(docRef, settings, { merge: true });
+      console.log("[SETTINGS] Saved successfully via Client SDK");
     }
-    console.log("[SETTINGS] Saved successfully");
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error saving settings to Firebase:", e);
-    throw e; // Rethrow to allow the route handler to catch it
+    const msg = e.message || "Unknown Firebase Error";
+    throw new Error(`Firebase Error: ${msg}. ${!process.env.FIREBASE_SERVICE_ACCOUNT ? "Assicurati di aver configurato FIREBASE_SERVICE_ACCOUNT su Vercel." : ""}`);
   }
 };
 
@@ -437,7 +441,8 @@ app.get("/api/debug/env", async (req, res) => {
   const settings = await getSettingsFromFirebase();
   res.json({
     hasGemini: !!(process.env.MY_GEMINI_KEY || process.env.GEMINI_API_KEY),
-    hasSmtp: !!settings.smtpHost
+    hasSmtp: !!settings.smtpHost,
+    hasServiceAccount: !!process.env.FIREBASE_SERVICE_ACCOUNT
   });
 });
 

@@ -641,7 +641,7 @@ function SettingsPanel() {
   const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("settings_draft_smtpUser") || "");
   const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("settings_draft_smtpPass") || "");
   const [loading, setLoading] = useState(false);
-  const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean } | null>(null);
+  const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean; hasServiceAccount: boolean } | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
 
   useEffect(() => {
@@ -718,12 +718,18 @@ function SettingsPanel() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const success = await api.saveSettings({ email, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass });
-      if (success) {
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass })
+      });
+      
+      if (response.ok) {
         setEnvStatus(prev => ({ ...prev, hasSmtp: !!smtpHost }));
         alert("Impostazioni salvate correttamente nel cloud!");
       } else {
-        alert("Errore durante il salvataggio. Controlla la console o riprova.");
+        const errorData = await response.json();
+        alert(`Errore durante il salvataggio: ${errorData.error || "Errore sconosciuto"}`);
       }
     } catch (e: any) {
       console.error("Save error:", e);
@@ -764,6 +770,16 @@ function SettingsPanel() {
           <div className="text-xs text-amber-800 space-y-1">
             <p className="font-bold">SMTP non configurato</p>
             <p>Le email non verranno inviate realmente finché non configuri un server SMTP (es. Gmail, SendGrid) nelle variabili d'ambiente.</p>
+          </div>
+        </div>
+      )}
+
+      {envStatus && !envStatus.hasServiceAccount && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex gap-3 items-start">
+          <Database className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+          <div className="text-xs text-blue-800 space-y-1">
+            <p className="font-bold">Database in modalità limitata</p>
+            <p>Non hai configurato <code>FIREBASE_SERVICE_ACCOUNT</code> su Vercel. Il salvataggio delle impostazioni potrebbe fallire se le regole di Firebase sono restrittive.</p>
           </div>
         </div>
       )}
