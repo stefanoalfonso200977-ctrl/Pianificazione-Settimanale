@@ -823,24 +823,6 @@ function SettingsPanel() {
     }
   };
 
-  const handleTestPush = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/test-push", { method: "POST" });
-      const data = await response.json();
-      
-      if (response.ok) {
-        alert(`Test inviato! Successi: ${data.sentCount}, Fallimenti: ${data.failureCount}`);
-      } else {
-        alert(`Errore test push: ${data.error}`);
-      }
-    } catch (e: any) {
-      alert("Errore critico test push: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -951,73 +933,6 @@ function SettingsPanel() {
             <p className="text-[11px] text-blue-800 leading-relaxed">
               <strong>💡 Tip per Gmail:</strong> Se usi Gmail, usa <code>smtp.gmail.com</code> (Porta 465 o 587) e assicurati di usare una <strong>"Password per le App"</strong> invece della tua password normale.
             </p>
-          </div>
-        </div>
-
-        <div className="pt-4 border-t space-y-3">
-          <h3 className="text-sm font-medium text-gray-700">Notifiche Push</h3>
-          <p className="text-xs text-gray-500 mb-2">Ricevi notifiche direttamente sul dispositivo.</p>
-          
-          {!messaging && (
-            <div className="p-3 bg-red-50 text-red-800 text-xs rounded-lg mb-2 border border-red-200">
-              <strong>Attenzione:</strong> Il tuo browser non supporta le notifiche push o sei in modalità incognito. Prova su Chrome/Edge/Firefox. Su iOS devi aggiungere l'app alla Home.
-            </div>
-          )}
-
-          {Notification.permission === 'denied' && (
-            <div className="p-4 bg-amber-50 text-amber-900 text-xs rounded-lg mb-4 border border-amber-200 shadow-sm">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-2">
-                  <p className="font-bold text-sm">Notifiche Bloccate dal Browser</p>
-                  <p>Hai negato il permesso in precedenza. Per attivarle:</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-1">
-                    <li>Clicca sull'icona del <strong>Lucchetto</strong> 🔒 o delle <strong>Impostazioni</strong> nella barra degli indirizzi in alto.</li>
-                    <li>Cerca "Notifiche" o "Permessi".</li>
-                    <li>Cambia da "Blocca" a <strong>"Consenti"</strong> o clicca su "Resetta permessi".</li>
-                    <li>Ricarica la pagina.</li>
-                  </ol>
-                  <button 
-                    onClick={() => window.location.reload()}
-                    className="mt-2 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md font-medium transition-colors text-xs border border-amber-300"
-                  >
-                    Ho sbloccato, ricarica pagina
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex gap-2">
-            <button
-              onClick={handleEnablePush}
-              disabled={loading}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1 flex items-center justify-center gap-2",
-                pushEnabled 
-                  ? "bg-green-100 text-green-700 hover:bg-green-200" 
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              )}
-            >
-              {pushEnabled ? (
-                <>
-                  <CheckCircle className="w-4 h-4" /> Notifiche Attive (Aggiorna)
-                </>
-              ) : (
-                <>
-                  <Bell className="w-4 h-4" /> Attiva Notifiche Push
-                </>
-              )}
-            </button>
-            
-            <button
-              onClick={handleTestPush}
-              disabled={!pushEnabled || loading}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors flex items-center gap-2 disabled:opacity-50"
-              title="Invia una notifica di prova"
-            >
-              <Sparkles className="w-4 h-4" /> Test
-            </button>
           </div>
         </div>
 
