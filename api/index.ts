@@ -432,34 +432,18 @@ app.post("/api/gemini/breakdown", async (req, res) => {
     const subtasks = JSON.parse(text);
     res.json({ subtasks });
   } catch (error: any) {
-    console.error("Gemini Error:", error);
-    
-    // Handle Quota Exceeded Error
-    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+    // Handle Quota Exceeded Error gracefully
+    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED") || error.status === 429) {
+      console.warn("[GEMINI] Quota exceeded (429).");
       return res.status(429).json({ 
         error: "Quota API Gemini esaurita. Il piano gratuito ha dei limiti giornalieri. Riprova più tardi o usa una chiave API diversa nelle Impostazioni." 
       });
     }
 
+    console.error("Gemini Error:", error);
     res.status(500).json({ error: error.message });
   }
 });
-
-// Helper for exponential backoff
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const callGeminiWithRetry = async (fn: () => Promise<any>, retries = 3, delay = 1000) => {
-  try {
-    return await fn();
-  } catch (error: any) {
-    if (retries > 0 && (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED"))) {
-      console.warn(`[GEMINI] Quota exceeded (429). Retrying in ${delay}ms... (${retries} attempts left)`);
-      await sleep(delay);
-      return callGeminiWithRetry(fn, retries - 1, delay * 2);
-    }
-    throw error;
-  }
-};
 
 app.post("/api/gemini/parse-task", async (req, res) => {
   const { text, currentDate } = req.body;
@@ -503,13 +487,13 @@ app.post("/api/gemini/parse-task", async (req, res) => {
     
     Se non viene specificata una data, usa la data di oggi.`;
 
-    const response = await callGeminiWithRetry(() => ai.models.generateContent({
+    const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }]
       }
-    }));
+    });
     
     let responseText = response.text || "";
     responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -517,15 +501,15 @@ app.post("/api/gemini/parse-task", async (req, res) => {
     const taskData = JSON.parse(responseText);
     res.json(taskData);
   } catch (error: any) {
-    console.error("Gemini Parse Error:", error);
-    
-    // Handle Quota Exceeded Error
-    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+    // Handle Quota Exceeded Error gracefully
+    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED") || error.status === 429) {
+      console.warn("[GEMINI] Quota exceeded (429).");
       return res.status(429).json({ 
         error: "Quota API Gemini esaurita. Il piano gratuito ha dei limiti giornalieri. Riprova più tardi o usa una chiave API diversa nelle Impostazioni." 
       });
     }
 
+    console.error("Gemini Parse Error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -545,7 +529,7 @@ app.post("/api/gemini/research", async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const response = await callGeminiWithRetry(() => ai.models.generateContent({
+    const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Esegui una ricerca approfondita su: "${text}". 
       Fornisci un riepilogo dettagliato, strutturato e facile da leggere. 
@@ -553,54 +537,19 @@ app.post("/api/gemini/research", async (req, res) => {
       config: { 
         tools: [{ googleSearch: {} }] 
       }
-    }));
+    });
     
     res.json({ content: response.text || "" });
   } catch (error: any) {
-    console.error("Gemini Research Error:", error);
-
-    // Handle Quota Exceeded Error
-    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+    // Handle Quota Exceeded Error gracefully
+    if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("RESOURCE_EXHAUSTED") || error.status === 429) {
+      console.warn("[GEMINI] Quota exceeded (429).");
       return res.status(429).json({ 
         error: "Quota API Gemini esaurita. Il piano gratuito ha dei limiti giornalieri. Riprova più tardi o usa una chiave API diversa nelle Impostazioni." 
       });
     }
 
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post("/api/test-push", async (req, res) => {
-  try {
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-      return res.status(500).json({ error: "FIREBASE_SERVICE_ACCOUNT non configurata." });
-    }
-
-    const tokensSnapshot = await getDocs(collection(db, "push_tokens"));
-    const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
-    
-    if (tokens.length === 0) {
-      return res.status(404).json({ error: "Nessun token push registrato nel database." });
-    }
-
-    const message = {
-      notification: {
-        title: "Test Notifica Push",
-        body: "Se leggi questo messaggio, le notifiche funzionano!"
-      },
-      tokens: tokens,
-    };
-
-    const response = await getAdminMessaging().sendEachForMulticast(message);
-    
-    res.json({ 
-      success: true, 
-      sentCount: response.successCount, 
-      failureCount: response.failureCount,
-      details: response.responses
-    });
-  } catch (error: any) {
-    console.error("Test Push Error:", error);
+    console.error("Gemini Research Error:", error);
     res.status(500).json({ error: error.message });
   }
 });

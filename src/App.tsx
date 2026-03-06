@@ -297,7 +297,49 @@ const api = {
 
 // Components
 
-const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; handleFileUpload?: any; removeFile?: any; onNavigateToSettings?: () => void }> = ({ task, onUpdate, onDelete, handleFileUpload, removeFile, onNavigateToSettings }) => {
+// Global Modal Component
+const GlobalModal = ({ isOpen, title, message, type, onConfirm, onCancel }: { isOpen: boolean; title: string; message: string; type: 'alert' | 'confirm'; onConfirm?: () => void; onCancel: () => void }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform transition-all scale-100">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+        <p className="text-sm text-gray-600 mb-6 leading-relaxed whitespace-pre-wrap">{message}</p>
+        <div className="flex justify-end gap-3">
+          {type === 'confirm' && (
+            <button 
+              onClick={onCancel}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Annulla
+            </button>
+          )}
+          <button 
+            onClick={() => {
+              if (onConfirm) onConfirm();
+              if (type === 'alert') onCancel();
+            }}
+            className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-lg shadow-red-200 transition-all"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TaskCard: FC<{ 
+  task: Task; 
+  onUpdate: () => void; 
+  onDelete: () => void; 
+  handleFileUpload?: any; 
+  removeFile?: any; 
+  onNavigateToSettings?: () => void;
+  showAlert?: (title: string, msg: string) => void;
+  showConfirm?: (title: string, msg: string, onConfirm: () => void) => void;
+}> = ({ task, onUpdate, onDelete, handleFileUpload, removeFile, onNavigateToSettings, showAlert, showConfirm }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
   const [isBreakingDown, setIsBreakingDown] = useState(false);
@@ -355,7 +397,8 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
 
   const handleGeminiBreakdown = async () => {
     if (!task.description && !task.title) {
-      alert("Inserisci almeno un titolo per usare Gemini.");
+      if (showAlert) showAlert("Attenzione", "Inserisci almeno un titolo per usare Gemini.");
+      else alert("Inserisci almeno un titolo per usare Gemini.");
       return;
     }
     
@@ -374,10 +417,14 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
     } catch (err: any) {
       console.error("Errore Gemini:", err);
       const errorMsg = err.message || "Riprova più tardi.";
-      if (errorMsg.includes("Quota API Gemini esaurita") && onNavigateToSettings) {
-        if (confirm(`${errorMsg}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`)) {
-          onNavigateToSettings();
-        }
+      if (errorMsg.includes("Quota API Gemini esaurita") && onNavigateToSettings && showConfirm) {
+        showConfirm(
+          "Quota Esaurita",
+          `${errorMsg}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`,
+          onNavigateToSettings
+        );
+      } else if (showAlert) {
+        showAlert("Errore Gemini", `Errore durante la comunicazione con Gemini: ${errorMsg}`);
       } else {
         alert(`Errore durante la comunicazione con Gemini: ${errorMsg}`);
       }
@@ -743,7 +790,7 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
   );
 };
 
-function SettingsPanel() {
+function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: string) => void; showConfirm: (t: string, m: string, c: () => void) => void }) {
   const [email, setEmail] = useState(() => localStorage.getItem("settings_draft_email") || "");
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("settings_draft_geminiApiKey") || "");
   const [smtpHost, setSmtpHost] = useState(() => localStorage.getItem("settings_draft_smtpHost") || "");
@@ -781,7 +828,7 @@ function SettingsPanel() {
 
   const handleEnablePush = async () => {
     if (!messaging) {
-      alert("Le notifiche push non sono supportate in questo browser o la configurazione Firebase non è corretta.");
+      showAlert("Errore Push", "Le notifiche push non sono supportate in questo browser o la configurazione Firebase non è corretta.");
       return;
     }
 
@@ -813,12 +860,12 @@ function SettingsPanel() {
           console.log("Token received:", token);
           await api.registerPushToken(token);
           setPushEnabled(true);
-          alert("Notifiche push attivate con successo!");
+          showAlert("Successo", "Notifiche push attivate con successo!");
         } else {
           throw new Error("Nessun token ricevuto da Firebase.");
         }
       } else {
-        alert("Permesso negato per le notifiche. Controlla le impostazioni del browser.");
+        showAlert("Permesso Negato", "Permesso negato per le notifiche. Controlla le impostazioni del browser.");
       }
     } catch (e: any) {
       console.error("Push error details:", e);
@@ -826,7 +873,7 @@ function SettingsPanel() {
       if (e.code === 'messaging/token-subscribe-failed') {
         errorMsg = "Errore di sottoscrizione (VAPID Key non valida o problema di rete). Assicurati che la chiave VAPID sia corretta e che il progetto Firebase abbia le API Cloud Messaging attive.";
       }
-      alert("Errore durante l'attivazione delle notifiche: " + errorMsg);
+      showAlert("Errore Push", "Errore durante l'attivazione delle notifiche: " + errorMsg);
     }
   };
 
@@ -841,32 +888,32 @@ function SettingsPanel() {
       
       if (response.ok) {
         setEnvStatus(prev => prev ? ({ ...prev, hasSmtp: !!smtpHost, hasGemini: !!geminiApiKey || prev.hasGemini }) : null);
-        alert("Impostazioni salvate correttamente nel cloud!");
+        showAlert("Salvataggio", "Impostazioni salvate correttamente nel cloud!");
       } else {
         const errorData = await response.json();
-        alert(`Errore durante il salvataggio: ${errorData.error || "Errore sconosciuto"}`);
+        showAlert("Errore Salvataggio", `Errore durante il salvataggio: ${errorData.error || "Errore sconosciuto"}`);
       }
     } catch (e: any) {
       console.error("Save error:", e);
-      alert("Errore critico durante il salvataggio: " + e.message);
+      showAlert("Errore Critico", "Errore critico durante il salvataggio: " + e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleTestEmail = async () => {
-    if (!email) return alert("Inserisci prima un'email");
+    if (!email) return showAlert("Attenzione", "Inserisci prima un'email");
     setLoading(true);
     const result = await api.testEmail(email);
     setLoading(false);
     if (result.success) {
       if (result.simulated) {
-        alert("ATTENZIONE: L'email è stata solo SIMULATA perché mancano i dati SMTP (Host, Utente, Password). Compila i campi SMTP, salva le impostazioni e riprova.");
+        showAlert("Email Simulata", "ATTENZIONE: L'email è stata solo SIMULATA perché mancano i dati SMTP (Host, Utente, Password). Compila i campi SMTP, salva le impostazioni e riprova.");
       } else {
-        alert("Email di test inviata! Controlla la tua casella di posta (anche nello Spam).");
+        showAlert("Email Inviata", "Email di test inviata! Controlla la tua casella di posta (anche nello Spam).");
       }
     } else {
-      alert(`Errore durante l'invio: ${result.error}\nAssicurati che i dati SMTP e la Password per le App siano corretti.`);
+      showAlert("Errore Invio", `Errore durante l'invio: ${result.error}\nAssicurati che i dati SMTP e la Password per le App siano corretti.`);
     }
   };
 
@@ -1042,13 +1089,13 @@ function SettingsPanel() {
                   // For now assume JSON or try to parse
                   const config = JSON.parse(cleanStr);
                   if (initFirebase(config)) {
-                    alert("Firebase configurato con successo! Ricarica la pagina.");
-                    window.location.reload();
+                    showAlert("Successo", "Firebase configurato con successo! La pagina verrà ricaricata.");
+                    setTimeout(() => window.location.reload(), 2000);
                   } else {
-                    alert("Configurazione non valida.");
+                    showAlert("Errore", "Configurazione non valida.");
                   }
                 } catch (e) {
-                  alert("Errore nel formato JSON. Assicurati di copiare solo l'oggetto JSON.");
+                  showAlert("Errore JSON", "Errore nel formato JSON. Assicurati di copiare solo l'oggetto JSON.");
                 }
               }
             }}
@@ -1086,41 +1133,39 @@ function SettingsPanel() {
                 type="file"
                 accept=".json"
                 className="hidden"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   
-                  if (!confirm("ATTENZIONE: Il ripristino cancellerà tutti i dati attuali e li sostituirà con quelli del backup. Continuare?")) {
-                    e.target.value = '';
-                    return;
-                  }
-
-                  const reader = new FileReader();
-                  reader.onload = async (ev) => {
-                    try {
-                      const json = JSON.parse(ev.target?.result as string);
-                      setLoading(true);
-                      const res = await fetch("/api/restore", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(json)
-                      });
-                      const data = await res.json();
-                      setLoading(false);
-                      
-                      if (data.success) {
-                        alert("Ripristino completato con successo! La pagina verrà ricaricata.");
-                        window.location.reload();
-                      } else {
-                        throw new Error(data.details || "Errore sconosciuto");
+                  showConfirm("Ripristino Backup", "ATTENZIONE: Il ripristino cancellerà tutti i dati attuali e li sostituirà con quelli del backup. Continuare?", () => {
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                      try {
+                        const json = JSON.parse(ev.target?.result as string);
+                        setLoading(true);
+                        const res = await fetch("/api/restore", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(json)
+                        });
+                        const data = await res.json();
+                        setLoading(false);
+                        
+                        if (data.success) {
+                          showAlert("Successo", "Ripristino completato con successo! La pagina verrà ricaricata.");
+                          setTimeout(() => window.location.reload(), 2000);
+                        } else {
+                          throw new Error(data.details || "Errore sconosciuto");
+                        }
+                      } catch (err: any) {
+                        console.error(err);
+                        showAlert("Errore Ripristino", "Errore durante il ripristino: " + err.message);
+                        setLoading(false);
                       }
-                    } catch (err: any) {
-                      console.error(err);
-                      alert("Errore durante il ripristino: " + err.message);
-                      setLoading(false);
-                    }
-                  };
-                  reader.readAsText(file);
+                    };
+                    reader.readAsText(file);
+                  });
+                  
                   e.target.value = ''; // Reset input
                 }}
               />
@@ -1132,7 +1177,7 @@ function SettingsPanel() {
   );
 }
 
-const QuickNotesBoard = () => {
+const QuickNotesBoard = ({ showConfirm }: { showConfirm: (t: string, m: string, c: () => void) => void }) => {
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [newNote, setNewNote] = useState("");
   const [isAdding, setIsAdding] = useState(false);
@@ -1168,10 +1213,10 @@ const QuickNotesBoard = () => {
     await api.updateQuickNote(note.id, { completed: !note.completed });
   };
 
-  const deleteNote = async (id: string) => {
-    if (confirm("Eliminare questa nota?")) {
+  const deleteNote = (id: string) => {
+    showConfirm("Elimina Nota", "Eliminare questa nota?", async () => {
       await api.deleteQuickNote(id);
-    }
+    });
   };
 
   return (
@@ -1258,18 +1303,37 @@ export default function App() {
   const [researchQuery, setResearchQuery] = useState("");
   const [pendingTaskTitle, setPendingTaskTitle] = useState("");
   const [isReporting, setIsReporting] = useState(false);
+  
+  // Global Modal State
+  const [modal, setModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'alert' | 'confirm';
+    onConfirm?: () => void;
+  }>({ isOpen: false, title: '', message: '', type: 'alert' });
+
+  const showAlert = (title: string, message: string) => {
+    setModal({ isOpen: true, title, message, type: 'alert' });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setModal({ isOpen: true, title, message, type: 'confirm', onConfirm });
+  };
+
+  const closeModal = () => setModal(prev => ({ ...prev, isOpen: false }));
 
   const handleSendReport = async () => {
     setIsReporting(true);
     try {
       const result = await api.triggerCheck();
       if (result.success) {
-        alert(`Report inviato! ${result.taskCount} attività trovate in scadenza.`);
+        showAlert("Report Inviato", `Report inviato! ${result.taskCount} attività trovate in scadenza.`);
       } else {
-        alert("Errore durante l'invio del report: " + result.message);
+        showAlert("Errore", "Errore durante l'invio del report: " + result.message);
       }
     } catch (e: any) {
-      alert("Errore durante l'invio del report: " + e.message);
+      showAlert("Errore", "Errore durante l'invio del report: " + e.message);
     } finally {
       setIsReporting(false);
     }
@@ -1552,11 +1616,13 @@ export default function App() {
                               
                               if (parsed && parsed.error) {
                                 if (parsed.error.includes("Quota API Gemini esaurita")) {
-                                  if (confirm(`${parsed.error}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`)) {
-                                    setView("settings");
-                                  }
+                                  showConfirm(
+                                    "Quota Esaurita",
+                                    `${parsed.error}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`,
+                                    () => setView("settings")
+                                  );
                                 } else {
-                                  alert("Errore durante l'analisi: " + parsed.error);
+                                  showAlert("Errore Analisi", "Errore durante l'analisi: " + parsed.error);
                                 }
                                 setIsParsing(false);
                                 return;
@@ -1575,11 +1641,13 @@ export default function App() {
                               }
                             } catch (e: any) {
                               if (e.message?.includes("Quota API Gemini esaurita")) {
-                                if (confirm(`${e.message}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`)) {
-                                  setView("settings");
-                                }
+                                showConfirm(
+                                  "Quota Esaurita",
+                                  `${e.message}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`,
+                                  () => setView("settings")
+                                );
                               } else {
-                                alert("Errore imprevisto: " + e.message);
+                                showAlert("Errore Imprevisto", "Errore imprevisto: " + e.message);
                               }
                             } finally {
                               setIsParsing(false);
@@ -1767,6 +1835,8 @@ export default function App() {
                             handleFileUpload={handleFileUpload}
                             removeFile={removeFile}
                             onNavigateToSettings={() => setView("settings")}
+                            showAlert={showAlert}
+                            showConfirm={showConfirm}
                           />
                         ))
                     )}
@@ -1801,6 +1871,8 @@ export default function App() {
                             handleFileUpload={handleFileUpload}
                             removeFile={removeFile}
                             onNavigateToSettings={() => setView("settings")}
+                            showAlert={showAlert}
+                            showConfirm={showConfirm}
                           />
                         ))
                     )}
@@ -1823,7 +1895,7 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="max-w-2xl mx-auto"
             >
-              <QuickNotesBoard />
+              <QuickNotesBoard showConfirm={showConfirm} />
             </motion.div>
           )}
 
@@ -1838,13 +1910,13 @@ export default function App() {
                 <h2 className="text-lg font-semibold">Storico Attività Completate</h2>
                 {completedTasks.length > 0 && (
                   <button
-                    onClick={async () => {
-                      if (confirm("Sei sicuro di voler eliminare definitivamente tutte le attività completate?")) {
+                    onClick={() => {
+                      showConfirm("Elimina Storico", "Sei sicuro di voler eliminare definitivamente tutte le attività completate?", async () => {
                         for (const task of completedTasks) {
                           await api.deleteTask(task.id);
                         }
                         refreshTasks();
-                      }
+                      });
                     }}
                     className="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1 px-3 py-1.5 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
                   >
@@ -1879,6 +1951,8 @@ export default function App() {
                           handleFileUpload={handleFileUpload}
                           removeFile={removeFile}
                           onNavigateToSettings={() => setView("settings")}
+                          showAlert={showAlert}
+                          showConfirm={showConfirm}
                         />
                       ))}
                     </div>
@@ -1898,11 +1972,20 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
             >
-              <SettingsPanel />
+              <SettingsPanel showAlert={showAlert} showConfirm={showConfirm} />
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+
+      <GlobalModal 
+        isOpen={modal.isOpen}
+        title={modal.title}
+        message={modal.message}
+        type={modal.type}
+        onConfirm={modal.onConfirm}
+        onCancel={closeModal}
+      />
     </div>
   );
 }
