@@ -297,7 +297,7 @@ const api = {
 
 // Components
 
-const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; handleFileUpload?: any; removeFile?: any }> = ({ task, onUpdate, onDelete, handleFileUpload, removeFile }) => {
+const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; handleFileUpload?: any; removeFile?: any; onNavigateToSettings?: () => void }> = ({ task, onUpdate, onDelete, handleFileUpload, removeFile, onNavigateToSettings }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
   const [isBreakingDown, setIsBreakingDown] = useState(false);
@@ -373,7 +373,14 @@ const TaskCard: FC<{ task: Task; onUpdate: () => void; onDelete: () => void; han
       }
     } catch (err: any) {
       console.error("Errore Gemini:", err);
-      alert(`Errore durante la comunicazione con Gemini: ${err.message || "Riprova più tardi."}`);
+      const errorMsg = err.message || "Riprova più tardi.";
+      if (errorMsg.includes("Quota API Gemini esaurita") && onNavigateToSettings) {
+        if (confirm(`${errorMsg}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`)) {
+          onNavigateToSettings();
+        }
+      } else {
+        alert(`Errore durante la comunicazione con Gemini: ${errorMsg}`);
+      }
     } finally {
       setIsBreakingDown(false);
     }
@@ -1544,7 +1551,13 @@ export default function App() {
                               const parsed = await api.parseTask(pendingTaskTitle, format(new Date(), "yyyy-MM-dd"));
                               
                               if (parsed && parsed.error) {
-                                alert("Errore durante l'analisi: " + parsed.error);
+                                if (parsed.error.includes("Quota API Gemini esaurita")) {
+                                  if (confirm(`${parsed.error}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`)) {
+                                    setView("settings");
+                                  }
+                                } else {
+                                  alert("Errore durante l'analisi: " + parsed.error);
+                                }
                                 setIsParsing(false);
                                 return;
                               }
@@ -1561,7 +1574,13 @@ export default function App() {
                                 refreshTasks();
                               }
                             } catch (e: any) {
-                              alert("Errore imprevisto: " + e.message);
+                              if (e.message?.includes("Quota API Gemini esaurita")) {
+                                if (confirm(`${e.message}\n\nVuoi andare alle impostazioni per inserire una tua chiave API?`)) {
+                                  setView("settings");
+                                }
+                              } else {
+                                alert("Errore imprevisto: " + e.message);
+                              }
                             } finally {
                               setIsParsing(false);
                             }
@@ -1747,6 +1766,7 @@ export default function App() {
                             }}
                             handleFileUpload={handleFileUpload}
                             removeFile={removeFile}
+                            onNavigateToSettings={() => setView("settings")}
                           />
                         ))
                     )}
@@ -1780,6 +1800,7 @@ export default function App() {
                             }}
                             handleFileUpload={handleFileUpload}
                             removeFile={removeFile}
+                            onNavigateToSettings={() => setView("settings")}
                           />
                         ))
                     )}
@@ -1857,6 +1878,7 @@ export default function App() {
                           }}
                           handleFileUpload={handleFileUpload}
                           removeFile={removeFile}
+                          onNavigateToSettings={() => setView("settings")}
                         />
                       ))}
                     </div>
