@@ -47,31 +47,47 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   }
 }
 
+// In-memory cache for settings (fallback if Firebase fails)
+let cachedSettings: any = {};
+
 const getSettingsFromFirebase = async () => {
   try {
+    let firebaseSettings = {};
     if (getApps().length > 0) {
       const adminDb = getAdminFirestore();
       const docSnap = await adminDb.collection("tasks").doc("_settings_").get();
       if (docSnap.exists) {
-        return docSnap.data();
+        firebaseSettings = docSnap.data() || {};
       }
     } else {
       const docRef = doc(db, "tasks", "_settings_");
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        return docSnap.data();
+        firebaseSettings = docSnap.data() || {};
       }
     }
-    return {};
+    
+    // Merge with cache (Firebase takes precedence if found, otherwise cache)
+    // If Firebase returns empty, we keep our cache.
+    if (Object.keys(firebaseSettings).length > 0) {
+      cachedSettings = { ...cachedSettings, ...firebaseSettings };
+    }
+    
+    return cachedSettings;
   } catch (e: any) {
     console.error("Error fetching settings from Firebase:", e);
-    return {};
+    // Return cache on error
+    return cachedSettings;
   }
 };
 
 const saveSettingsToFirebase = async (settings: any) => {
+  // Update cache immediately
+  cachedSettings = { ...cachedSettings, ...settings };
+  
   try {
-    console.log("[SETTINGS] Saving to Firebase...");
+    const keyMasked = settings.geminiApiKey ? `${settings.geminiApiKey.substring(0, 5)}...` : "NONE";
+    console.log(`[SETTINGS] Saving to Firebase... (API Key: ${keyMasked})`);
     if (getApps().length > 0) {
       const adminDb = getAdminFirestore();
       await adminDb.collection("tasks").doc("_settings_").set(settings, { merge: true });
@@ -87,8 +103,8 @@ const saveSettingsToFirebase = async (settings: any) => {
     }
   } catch (e: any) {
     console.error("Error saving settings to Firebase:", e);
-    const msg = e.message || "Unknown Firebase Error";
-    throw new Error(`Firebase Error: ${msg}. ${!process.env.FIREBASE_SERVICE_ACCOUNT ? "Assicurati di aver configurato FIREBASE_SERVICE_ACCOUNT su Vercel." : ""}`);
+    // We don't throw here anymore to allow the in-memory cache to work for the session
+    console.warn("[SETTINGS] Falling back to in-memory storage for this session.");
   }
 };
 
@@ -281,9 +297,13 @@ const getValidApiKey = async () => {
     if (settings.geminiApiKey) {
       const cleanKey = settings.geminiApiKey.trim();
       if (cleanKey && cleanKey !== knownFirebaseKey && cleanKey.length > 20) {
-        console.log("[GEMINI] Using API Key from Firebase Settings");
+        console.log(`[GEMINI] Using API Key from Settings (starts with ${cleanKey.substring(0, 8)}...)`);
         return cleanKey;
+      } else {
+        console.log(`[GEMINI] Settings has a key (${cleanKey.substring(0, 5)}...) but it looks invalid or is the default Firebase key.`);
       }
+    } else {
+      console.log("[GEMINI] No API Key found in Settings.");
     }
   } catch (e) {
     console.warn("[GEMINI] Failed to fetch settings for API Key check", e);
@@ -303,11 +323,14 @@ const getValidApiKey = async () => {
     if (cleanKey === knownFirebaseKey) continue;
     
     if (cleanKey.startsWith("AIza") && cleanKey.length > 20) {
+      console.log(`[GEMINI] Using API Key from Environment (starts with ${cleanKey.substring(0, 8)}...)`);
       return cleanKey;
     }
   }
 
-  // 2. Scan ALL environment variables for a potential key
+  console.log("[GEMINI] No valid API Key found in Environment or Settings.");
+  return "";
+};
   // This helps if the user named it something else (e.g., VITE_GEMINI_API_KEY)
   console.log("[GEMINI] Scanning all environment variables for a valid key...");
   for (const [keyName, value] of Object.entries(process.env)) {
