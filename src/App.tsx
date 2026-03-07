@@ -12,7 +12,7 @@ import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 // Firebase Setup
-const firebaseConfig = {
+const defaultFirebaseConfig = {
   apiKey: "AIzaSyAiYIjjUQWY5QrMwHeSHyGuWSbZzeUeB-U",
   authDomain: "pianificazione-settimana.firebaseapp.com",
   projectId: "pianificazione-settimana",
@@ -23,9 +23,27 @@ const firebaseConfig = {
 
 let db: any = null;
 let messaging: any = null;
+let activeConfig = defaultFirebaseConfig;
 
 const initFirebase = (config: any) => {
   try {
+    // Check if we have a saved config in localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem("firebaseConfig");
+      if (saved && !config.apiKey) { // If no specific config passed, try loading saved
+         try {
+           config = JSON.parse(saved);
+         } catch (e) {
+           console.error("Invalid saved config", e);
+         }
+      }
+    }
+    
+    // If still no config (and no saved), use default
+    if (!config.apiKey) config = defaultFirebaseConfig;
+    
+    activeConfig = config; // Store for SW registration
+    
     const app = initializeApp(config);
     db = getFirestore(app);
     
@@ -38,7 +56,13 @@ const initFirebase = (config: any) => {
       }
     }
     
-    console.log("Firebase initialized successfully");
+    console.log("Firebase initialized successfully with project:", config.projectId);
+    
+    // Save to local storage if it's a new valid config
+    if (typeof window !== 'undefined' && config.apiKey && config.projectId !== defaultFirebaseConfig.projectId) {
+      localStorage.setItem("firebaseConfig", JSON.stringify(config));
+    }
+    
     return true;
   } catch (e) {
     console.error("Firebase init error:", e);
@@ -47,7 +71,7 @@ const initFirebase = (config: any) => {
 };
 
 // Initialize immediately
-initFirebase(firebaseConfig);
+initFirebase({});
 
 // Types
 interface TaskFile {
@@ -847,9 +871,11 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
         const defaultVapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI";
         const vapidKey = customVapidKey || defaultVapidKey;
         
-        console.log("Registering service worker...");
-        // Ensure the service worker is registered and ready
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        console.log("Registering service worker with config:", activeConfig.projectId);
+        // Ensure the service worker is registered and ready with correct config
+        const swUrl = `/firebase-messaging-sw.js?apiKey=${activeConfig.apiKey}&projectId=${activeConfig.projectId}&messagingSenderId=${activeConfig.messagingSenderId}&appId=${activeConfig.appId}`;
+        
+        const registration = await navigator.serviceWorker.register(swUrl, {
           scope: '/'
         });
         
@@ -1098,9 +1124,16 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
           </div>
           
           {!pushEnabled && (
-            <p className="text-[10px] text-gray-400 italic">
-              Nota: Richiede il supporto del browser e una configurazione VAPID valida in Firebase.
-            </p>
+            <div className="space-y-1">
+              <p className="text-[10px] text-gray-400 italic">
+                Nota: Richiede il supporto del browser e una configurazione VAPID valida in Firebase.
+              </p>
+              {/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream && (
+                <p className="text-[10px] text-orange-600 font-medium bg-orange-50 p-1 rounded border border-orange-100">
+                  ⚠️ Su iPhone/iPad: Devi aggiungere questa app alla Home ("Condividi" {'>'} "Aggiungi alla schermata Home") per ricevere notifiche.
+                </p>
+              )}
+            </div>
           )}
         </div>
 
