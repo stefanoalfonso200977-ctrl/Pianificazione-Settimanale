@@ -1343,7 +1343,14 @@ export default function App() {
         if (result.push.success) {
           message += `PUSH: Inviate ${result.push.count} notifiche.`;
         } else {
-          message += `PUSH: Non inviate (${result.push.error || "Nessun token o errore sconosciuto"}).`;
+          const pushError = result.push.error || "Errore sconosciuto";
+          message += `PUSH: Non inviate (${pushError}).`;
+          
+          if (pushError.includes("Admin SDK")) {
+            message += `\n\nSUGGERIMENTO: Devi configurare FIREBASE_SERVICE_ACCOUNT nelle variabili d'ambiente del server per abilitare l'invio delle notifiche.`;
+          } else if (pushError.includes("Token")) {
+            message += `\n\nSUGGERIMENTO: Assicurati di aver abilitato le notifiche su almeno un dispositivo cliccando sull'icona della campanella.`;
+          }
         }
       }
 

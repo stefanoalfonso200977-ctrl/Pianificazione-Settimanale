@@ -280,7 +280,11 @@ const checkAndNotify = async () => {
         });
       }
     } else {
-        pushResult = { success: false, count: 0, error: "No tokens or Admin SDK not initialized" };
+        if (getApps().length === 0) {
+            pushResult = { success: false, count: 0, error: "Admin SDK non inizializzato (Manca FIREBASE_SERVICE_ACCOUNT)" };
+        } else {
+            pushResult = { success: false, count: 0, error: "Nessun dispositivo registrato per le notifiche (Token non trovati)" };
+        }
     }
   } catch (e) {
     console.error("[PUSH] Error sending notifications:", e);
