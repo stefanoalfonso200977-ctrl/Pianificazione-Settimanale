@@ -815,6 +815,8 @@ const TaskCard: FC<{
 };
 
 function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: string) => void; showConfirm: (t: string, m: string, c: () => void) => void }) {
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
   const [email, setEmail] = useState(() => localStorage.getItem("settings_draft_email") || "");
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("settings_draft_geminiApiKey") || "");
   const [smtpHost, setSmtpHost] = useState(() => localStorage.getItem("settings_draft_smtpHost") || "");
@@ -827,7 +829,18 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
   const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean; hasServiceAccount: boolean; hasGemini: boolean } | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
 
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordInput === "Steangros2#") {
+      setIsUnlocked(true);
+    } else {
+      showAlert("Accesso Negato", "Password non corretta.");
+    }
+  };
+
   useEffect(() => {
+    if (!isUnlocked) return;
+
     api.getSettings().then(data => {
       // Only overwrite if draft is empty or we just loaded
       if (data.email && !email) setEmail(data.email);
@@ -847,7 +860,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
         handleEnablePush(true); 
       }
     }
-  }, []);
+  }, [isUnlocked]);
 
   // Persist drafts to localStorage
   useEffect(() => { localStorage.setItem("settings_draft_email", email); }, [email]);
@@ -994,6 +1007,34 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
       showAlert("Errore", "Errore durante il test del controllo scadenze: " + e.message);
     }
   };
+
+  if (!isUnlocked) {
+    return (
+      <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto mt-8 text-center">
+        <h2 className="text-lg font-bold mb-4 flex items-center justify-center gap-2">
+          <Settings className="w-5 h-5 text-gray-700" />
+          Area Protetta
+        </h2>
+        <p className="text-sm text-gray-500 mb-6">Inserisci la password per accedere alle impostazioni.</p>
+        <form onSubmit={handleUnlock} className="space-y-4">
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            className="w-full rounded-lg border-gray-200 p-3 border text-sm focus:ring-2 focus:ring-red-500/20 outline-none text-center"
+            placeholder="Password"
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+          >
+            Accedi
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto mt-8">
