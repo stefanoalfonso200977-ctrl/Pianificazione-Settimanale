@@ -970,6 +970,31 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
     }
   };
 
+  const handleTestCron = async () => {
+    setLoading(true);
+    try {
+      const result = await api.triggerCheck();
+      setLoading(false);
+      
+      let msg = "";
+      if (result.success) {
+        msg = `Controllo completato!\n\nAttività in scadenza trovate: ${result.taskCount}\nEmail inviata: ${result.message}`;
+        if (result.push?.success) {
+          msg += `\nNotifiche Push inviate: ${result.push.count}`;
+        } else if (result.push?.error) {
+          msg += `\nErrore Push: ${JSON.stringify(result.push.error)}`;
+        }
+        showAlert("Test Riuscito", msg);
+      } else {
+        showAlert("Attenzione", `Il controllo non è andato a buon fine: ${result.message}`);
+      }
+    } catch (e: any) {
+      setLoading(false);
+      console.error("Cron test error:", e);
+      showAlert("Errore", "Errore durante il test del controllo scadenze: " + e.message);
+    }
+  };
+
   return (
     <div className="bg-white p-6 rounded-xl border shadow-sm max-w-md mx-auto mt-8">
       <h2 className="text-lg sm:text-xl font-semibold mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
@@ -1146,6 +1171,20 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
             >
               Forza aggiornamento token
             </button>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Test Manuale</h3>
+            <button
+              onClick={handleTestCron}
+              disabled={loading}
+              className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 border border-gray-300"
+            >
+              {loading ? "Controllo in corso..." : "Esegui Controllo Scadenze (Email + Push)"}
+            </button>
+            <p className="text-[10px] text-gray-400 mt-1 italic">
+              Simula il controllo automatico delle 8:00. Invia email e notifiche se ci sono scadenze.
+            </p>
           </div>
           
           {!pushEnabled && (
