@@ -1327,15 +1327,30 @@ export default function App() {
     setIsReporting(true);
     try {
       const result = await api.triggerCheck();
+      
+      let message = "";
       if (result.success) {
         if (result.simulated) {
-          showAlert("Email Simulata", `ATTENZIONE: L'email è stata solo SIMULATA perché mancano i dati SMTP. Compila i campi SMTP nelle impostazioni per inviare email reali.\n\n${result.taskCount} attività trovate in scadenza.`);
+          message += `EMAIL: SIMULATA (Mancano dati SMTP).\n`;
         } else {
-          showAlert("Report Inviato", `Report inviato! ${result.taskCount} attività trovate in scadenza.`);
+          message += `EMAIL: Inviata con successo.\n`;
         }
       } else {
-        showAlert("Errore", "Errore durante l'invio del report: " + result.message);
+        message += `EMAIL: Errore (${result.message})\n`;
       }
+
+      if (result.push) {
+        if (result.push.success) {
+          message += `PUSH: Inviate ${result.push.count} notifiche.`;
+        } else {
+          message += `PUSH: Non inviate (${result.push.error || "Nessun token o errore sconosciuto"}).`;
+        }
+      }
+
+      message += `\n\nAttività in scadenza trovate: ${result.taskCount}`;
+
+      showAlert("Esito Report", message);
+
     } catch (e: any) {
       showAlert("Errore", "Errore durante l'invio del report: " + e.message);
     } finally {

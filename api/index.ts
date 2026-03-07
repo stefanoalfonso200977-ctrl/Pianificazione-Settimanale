@@ -248,6 +248,7 @@ const checkAndNotify = async () => {
 
   const emailResult = await sendEmail(settings.email, "Agente Pianificazione: Attività in Scadenza", html);
   
+  let pushResult = { success: false, count: 0, error: null as any };
   // --- Send Push Notifications ---
   try {
     const tokensSnapshot = await getDocs(collection(db, "push_tokens"));
@@ -264,6 +265,7 @@ const checkAndNotify = async () => {
 
       const response = await getAdminMessaging().sendEachForMulticast(message);
       console.log(`[PUSH] Successfully sent ${response.successCount} messages; ${response.failureCount} failed.`);
+      pushResult = { success: true, count: response.successCount, error: null };
       
       // Optional: Cleanup invalid tokens
       if (response.failureCount > 0) {
@@ -277,16 +279,20 @@ const checkAndNotify = async () => {
           }
         });
       }
+    } else {
+        pushResult = { success: false, count: 0, error: "No tokens or Admin SDK not initialized" };
     }
   } catch (e) {
     console.error("[PUSH] Error sending notifications:", e);
+    pushResult = { success: false, count: 0, error: e };
   }
 
   return { 
     success: emailResult.success, 
     message: emailResult.success ? "Email inviata con successo." : "Errore invio email: " + emailResult.error,
     taskCount: expiringTasks.length,
-    simulated: (emailResult as any).simulated
+    simulated: (emailResult as any).simulated,
+    push: pushResult
   };
 };
 
