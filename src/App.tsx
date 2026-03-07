@@ -822,6 +822,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
   const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("settings_draft_smtpUser") || "");
   const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("settings_draft_smtpPass") || "");
   const [customVapidKey, setCustomVapidKey] = useState(() => localStorage.getItem("settings_draft_vapidKey") || "");
+  const [serviceAccountJson, setServiceAccountJson] = useState(() => localStorage.getItem("settings_draft_serviceAccount") || "");
   const [loading, setLoading] = useState(false);
   const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean; hasServiceAccount: boolean; hasGemini: boolean } | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -835,6 +836,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
       if (data.smtpPort && smtpPort === "587") setSmtpPort(String(data.smtpPort));
       if (data.smtpUser && !smtpUser) setSmtpUser(data.smtpUser);
       if (data.smtpPass && !smtpPass) setSmtpPass(data.smtpPass);
+      if (data.serviceAccountJson && !serviceAccountJson) setServiceAccountJson(data.serviceAccountJson);
     });
     api.getEnvStatus().then(setEnvStatus);
     
@@ -855,6 +857,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
   useEffect(() => { localStorage.setItem("settings_draft_smtpUser", smtpUser); }, [smtpUser]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpPass", smtpPass); }, [smtpPass]);
   useEffect(() => { localStorage.setItem("settings_draft_vapidKey", customVapidKey); }, [customVapidKey]);
+  useEffect(() => { localStorage.setItem("settings_draft_serviceAccount", serviceAccountJson); }, [serviceAccountJson]);
 
   const handleEnablePush = async (silent = false) => {
     if (!messaging) {
@@ -922,11 +925,11 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
       const response = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, geminiApiKey, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass })
+        body: JSON.stringify({ email, geminiApiKey, smtpHost, smtpPort: parseInt(smtpPort), smtpUser, smtpPass, serviceAccountJson })
       });
       
       if (response.ok) {
-        setEnvStatus(prev => prev ? ({ ...prev, hasSmtp: !!smtpHost, hasGemini: !!geminiApiKey || prev.hasGemini }) : null);
+        setEnvStatus(prev => prev ? ({ ...prev, hasSmtp: !!smtpHost, hasGemini: !!geminiApiKey || prev.hasGemini, hasServiceAccount: !!serviceAccountJson || prev.hasServiceAccount }) : null);
         showAlert("Salvataggio", "Impostazioni salvate correttamente nel cloud!");
       } else {
         const errorData = await response.json();
@@ -1066,6 +1069,17 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
             />
             <p className="text-[10px] text-gray-400 mt-1">
               Trovala in: Console Firebase {'>'} Impostazioni Progetto {'>'} Cloud Messaging {'>'} Web Push certificates.
+            </p>
+            
+            <label className="block text-xs text-gray-600 mb-1 mt-3">Firebase Service Account (JSON)</label>
+            <textarea 
+              value={serviceAccountJson} 
+              onChange={e => setServiceAccountJson(e.target.value)} 
+              placeholder='{ "type": "service_account", ... }' 
+              className="w-full rounded-lg border-gray-300 shadow-sm text-xs p-2 border font-mono h-24" 
+            />
+            <p className="text-[10px] text-gray-400 mt-1">
+              Necessario per INVIARE le notifiche. Genera in: Console Firebase {'>'} Impostazioni Progetto {'>'} Account di servizio {'>'} Genera nuova chiave privata.
             </p>
           </div>
         </div>

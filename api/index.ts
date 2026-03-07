@@ -28,24 +28,53 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
 // --- Firebase Admin Setup (for Push Notifications) ---
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  try {
-    let serviceAccountData = process.env.FIREBASE_SERVICE_ACCOUNT;
-    // Handle cases where the JSON might be wrapped in quotes or have escaped newlines
-    if (serviceAccountData.startsWith("'") || serviceAccountData.startsWith("\"")) {
-      serviceAccountData = serviceAccountData.substring(1, serviceAccountData.length - 1);
+const initFirebaseAdmin = async () => {
+  if (getApps().length > 0) return true; // Already initialized
+
+  let serviceAccount: any = null;
+
+  // 1. Try Environment Variable
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      let data = process.env.FIREBASE_SERVICE_ACCOUNT;
+      if (data.startsWith("'") || data.startsWith("\"")) {
+        data = data.substring(1, data.length - 1);
+      }
+      serviceAccount = JSON.parse(data);
+    } catch (e) {
+      console.error("Env Service Account parse error:", e);
     }
-    const serviceAccount = JSON.parse(serviceAccountData);
-    if (getApps().length === 0) {
+  }
+
+  // 2. Try Settings from Firestore (if env var failed or missing)
+  if (!serviceAccount) {
+    try {
+      const settings = await getSettingsFromFirebase();
+      if (settings.serviceAccountJson) {
+        serviceAccount = JSON.parse(settings.serviceAccountJson);
+        console.log("Loaded Service Account from Firestore Settings");
+      }
+    } catch (e) {
+      console.error("Settings Service Account parse error:", e);
+    }
+  }
+
+  if (serviceAccount) {
+    try {
       initAdmin({
         credential: cert(serviceAccount)
       });
       console.log("Firebase Admin initialized successfully");
+      return true;
+    } catch (e) {
+      console.error("Firebase Admin init error:", e);
     }
-  } catch (e) {
-    console.error("Firebase Admin init error:", e);
   }
-}
+  return false;
+};
+
+// Initialize on startup if possible
+initFirebaseAdmin();
 
 // In-memory cache for settings (fallback if Firebase fails)
 let cachedSettings: any = {};
@@ -251,6 +280,11 @@ const checkAndNotify = async () => {
   let pushResult = { success: false, count: 0, error: null as any };
   // --- Send Push Notifications ---
   try {
+    // Ensure Admin SDK is ready
+    if (getApps().length === 0) {
+       await initFirebaseAdmin();
+    }
+
     const tokensSnapshot = await getDocs(collection(db, "push_tokens"));
     const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
     
