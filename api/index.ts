@@ -67,10 +67,12 @@ const getSettingsFromFirebase = async () => {
       }
     }
     
-    // Merge with cache (Firebase takes precedence if found, otherwise cache)
-    // If Firebase returns empty, we keep our cache.
+    // Merge with cache
+    // CRITICAL: We prioritize cachedSettings (local memory) over firebaseSettings (DB) 
+    // because cachedSettings might contain optimistic updates that failed to save to DB.
+    // If we let Firebase overwrite cache, we lose the user's unsaved changes in this session.
     if (Object.keys(firebaseSettings).length > 0) {
-      cachedSettings = { ...cachedSettings, ...firebaseSettings };
+      cachedSettings = { ...firebaseSettings, ...cachedSettings };
     }
     
     return cachedSettings;
