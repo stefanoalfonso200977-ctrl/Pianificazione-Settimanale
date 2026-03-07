@@ -826,9 +826,9 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
   useEffect(() => { localStorage.setItem("settings_draft_smtpUser", smtpUser); }, [smtpUser]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpPass", smtpPass); }, [smtpPass]);
 
-  const handleEnablePush = async () => {
+  const handleEnablePush = async (silent = false) => {
     if (!messaging) {
-      showAlert("Errore Push", "Le notifiche push non sono supportate in questo browser o la configurazione Firebase non è corretta.");
+      if (!silent) showAlert("Errore Push", "Le notifiche push non sono supportate in questo browser o la configurazione Firebase non è corretta.");
       return;
     }
 
@@ -859,12 +859,12 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
           console.log("Token received:", token);
           await api.registerPushToken(token);
           setPushEnabled(true);
-          showAlert("Successo", "Notifiche push attivate con successo!");
+          if (!silent) showAlert("Successo", "Notifiche push attivate con successo! Token aggiornato.");
         } else {
           throw new Error("Nessun token ricevuto da Firebase.");
         }
       } else {
-        showAlert("Permesso Negato", "Permesso negato per le notifiche. Controlla le impostazioni del browser.");
+        if (!silent) showAlert("Permesso Negato", "Permesso negato per le notifiche. Controlla le impostazioni del browser.");
       }
     } catch (e: any) {
       console.error("Push error details:", e);
@@ -872,9 +872,16 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
       if (e.code === 'messaging/token-subscribe-failed') {
         errorMsg = "Errore di sottoscrizione (VAPID Key non valida o problema di rete). Assicurati che la chiave VAPID sia corretta e che il progetto Firebase abbia le API Cloud Messaging attive.";
       }
-      showAlert("Errore Push", "Errore durante l'attivazione delle notifiche: " + errorMsg);
+      if (!silent) showAlert("Errore Push", "Errore durante l'attivazione delle notifiche: " + errorMsg);
     }
   };
+
+  // Automatically refresh token if permission is already granted
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      handleEnablePush(true);
+    }
+  }, []);
 
   const handleSave = async () => {
     setLoading(true);
@@ -1044,7 +1051,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
           </p>
           
           <button
-            onClick={handleEnablePush}
+            onClick={() => handleEnablePush(false)}
             disabled={pushEnabled}
             className={cn(
               "w-full text-center px-3 py-2 rounded-lg text-sm font-bold transition-colors border",
@@ -1059,6 +1066,15 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
               </span>
             ) : "Attiva Notifiche Push"}
           </button>
+          
+          {pushEnabled && (
+            <button
+              onClick={() => handleEnablePush(false)}
+              className="w-full text-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-3 h-3" /> Aggiorna Token (Se non ricevi notifiche)
+            </button>
+          )}
           
           {!pushEnabled && (
             <p className="text-[10px] text-gray-400 italic">
