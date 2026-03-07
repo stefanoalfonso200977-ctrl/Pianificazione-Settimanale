@@ -239,12 +239,12 @@ const api = {
     const updatedNotes = localNotes.filter((n: QuickNote) => n.id !== id);
     localStorage.setItem("quick_notes", JSON.stringify(updatedNotes));
   },
-  parseTask: async (text: string, currentDate: string) => {
+  parseTask: async (text: string, currentDate: string, files?: TaskFile[]) => {
     try {
       const res = await fetch("/api/gemini/parse-task", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, currentDate })
+        body: JSON.stringify({ text, currentDate, files })
       });
       return res.json();
     } catch (e: any) {
@@ -1771,7 +1771,7 @@ export default function App() {
                             setIsParsing(true);
                             try {
                               // Use parseTask which handles breakdown/analysis
-                              const parsed = await api.parseTask(pendingTaskTitle, format(new Date(), "yyyy-MM-dd"));
+                              const parsed = await api.parseTask(pendingTaskTitle, format(new Date(), "yyyy-MM-dd"), newTask.files);
                               
                               if (parsed && parsed.error) {
                                 if (parsed.error.includes("Quota API Gemini esaurita")) {

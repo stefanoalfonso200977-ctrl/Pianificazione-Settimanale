@@ -495,7 +495,7 @@ app.post("/api/gemini/breakdown", async (req, res) => {
 });
 
 app.post("/api/gemini/parse-task", async (req, res) => {
-  const { text, currentDate } = req.body;
+  const { text, currentDate, files } = req.body;
   
   try {
     const apiKey = await getValidApiKey();
@@ -509,39 +509,45 @@ app.post("/api/gemini/parse-task", async (req, res) => {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    let prompt = `Sei un assistente personale intelligente e capace.
+    let prompt = `Sei un assistente esperto di pianificazione.
     Oggi è il ${currentDate}.
     
-    Richiesta dell'utente: "${text}"
+    Analizza questa richiesta dell'utente: "${text}"
 
-    Il tuo compito è ESEGUIRE la richiesta dell'utente, non solo pianificarla.
-    
-    1. Se l'utente chiede informazioni, una ricerca, o di scrivere qualcosa (es. "Cerca voli per Parigi", "Scrivi una mail a X", "Dammi una ricetta"):
-       - ESEGUI la ricerca o la generazione del testo.
-       - Metti il risultato dettagliato nel campo "description".
-       - Metti un titolo breve e chiaro nel campo "title".
-       - NON creare sotto-task se non richiesto esplicitamente.
+    Il tuo obiettivo è strutturare questa richiesta in un'attività chiara e azionabile.
 
-    2. Se l'utente vuole solo salvare un promemoria (es. "Comprare latte", "Riunione domani"):
-       - Estrai titolo, descrizione e data.
-       - NON creare sotto-task se non servono.
+    1. Estrai un TITOLO breve e chiaro.
+    2. Scrivi una DESCRIZIONE dettagliata. Se l'utente chiede informazioni (es. "Cerca X", "Come fare Y"), usa i tuoi strumenti per cercare e includi il risultato nella descrizione.
+    3. Identifica una SCADENZA (YYYY-MM-DD). Se non specificata, usa la data di oggi.
+    4. IMPORTANTE: Se l'attività è complessa (es. "Organizzare viaggio", "Scrivere relazione", "Dipingere casa"), SCOMPONILA in 3-5 sotto-task concreti e sequenziali. Se è semplice, lascia l'array vuoto.
 
-    Restituisci SOLO un oggetto JSON con questa struttura esatta, senza markdown o altro testo:
+    Restituisci SOLO un oggetto JSON con questa struttura esatta, senza markdown:
     {
-      "title": "Titolo breve",
-      "description": "Risultato della richiesta o descrizione",
+      "title": "Titolo dell'attività",
+      "description": "Descrizione completa o risultato ricerca",
       "deadline": "YYYY-MM-DD",
-      "subtasks": [] 
+      "subtasks": ["Sotto-task 1", "Sotto-task 2", "Sotto-task 3"] 
+    }`;
+
+    const parts: any[] = [{ text: prompt }];
+
+    if (files && Array.isArray(files)) {
+      for (const file of files) {
+        if (file.mimeType.startsWith('image/')) {
+          const base64Data = file.data.split(',')[1];
+          parts.push({
+            inlineData: {
+              data: base64Data,
+              mimeType: file.mimeType
+            }
+          });
+        }
+      }
     }
-    
-    Se non viene specificata una data, usa la data di oggi.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }]
-      }
+      contents: { parts }
     });
     
     let responseText = response.text || "";
