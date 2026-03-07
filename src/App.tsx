@@ -797,6 +797,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
   const [smtpPort, setSmtpPort] = useState(() => localStorage.getItem("settings_draft_smtpPort") || "587");
   const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("settings_draft_smtpUser") || "");
   const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("settings_draft_smtpPass") || "");
+  const [customVapidKey, setCustomVapidKey] = useState(() => localStorage.getItem("settings_draft_vapidKey") || "");
   const [loading, setLoading] = useState(false);
   const [envStatus, setEnvStatus] = useState<{ hasSmtp: boolean; hasServiceAccount: boolean; hasGemini: boolean } | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -814,7 +815,11 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
     api.getEnvStatus().then(setEnvStatus);
     
     if ("Notification" in window) {
-      setPushEnabled(Notification.permission === "granted");
+      if (Notification.permission === "granted") {
+        setPushEnabled(true);
+        // Automatically refresh token to ensure it's in DB
+        handleEnablePush(true); 
+      }
     }
   }, []);
 
@@ -825,6 +830,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
   useEffect(() => { localStorage.setItem("settings_draft_smtpPort", smtpPort); }, [smtpPort]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpUser", smtpUser); }, [smtpUser]);
   useEffect(() => { localStorage.setItem("settings_draft_smtpPass", smtpPass); }, [smtpPass]);
+  useEffect(() => { localStorage.setItem("settings_draft_vapidKey", customVapidKey); }, [customVapidKey]);
 
   const handleEnablePush = async (silent = false) => {
     if (!messaging) {
@@ -837,8 +843,9 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
       const permission = await Notification.requestPermission();
       if (permission === "granted") {
         // VAPID Key for Firebase Cloud Messaging
-        // This key must match the project "pianificazione-settimana"
-        const vapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI"; 
+        // Use custom key if provided, otherwise try the hardcoded one (which might be invalid for this specific project)
+        const defaultVapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI";
+        const vapidKey = customVapidKey || defaultVapidKey;
         
         console.log("Registering service worker...");
         // Ensure the service worker is registered and ready
@@ -849,7 +856,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
         // Wait for the service worker to be active
         await navigator.serviceWorker.ready;
 
-        console.log("Getting FCM token...");
+        console.log("Getting FCM token with VAPID key:", vapidKey);
         const token = await getToken(messaging, { 
           vapidKey,
           serviceWorkerRegistration: registration
@@ -869,10 +876,10 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
     } catch (e: any) {
       console.error("Push error details:", e);
       let errorMsg = e.message;
-      if (e.code === 'messaging/token-subscribe-failed') {
-        errorMsg = "Errore di sottoscrizione (VAPID Key non valida o problema di rete). Assicurati che la chiave VAPID sia corretta e che il progetto Firebase abbia le API Cloud Messaging attive.";
+      if (e.code === 'messaging/token-subscribe-failed' || e.message.includes("VAPID")) {
+        errorMsg = "Chiave VAPID non valida. Vai nelle Impostazioni dell'app e inserisci la 'Web Push Certificate' corretta dal tuo progetto Firebase (Impostazioni > Cloud Messaging).";
       }
-      if (!silent) showAlert("Errore Push", "Errore durante l'attivazione delle notifiche: " + errorMsg);
+      if (!silent) showAlert("Errore Push", errorMsg);
     }
   };
 
@@ -1020,6 +1027,21 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
               <input type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="••••••••" className="w-full rounded-lg border-gray-300 shadow-sm text-sm p-2 border" />
             </div>
           </div>
+          
+          <div className="pt-2 border-t mt-2">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Configurazione Notifiche (Avanzato)</h3>
+            <label className="block text-xs text-gray-600 mb-1">VAPID Key (Web Push Certificate)</label>
+            <input 
+              type="text" 
+              value={customVapidKey} 
+              onChange={e => setCustomVapidKey(e.target.value)} 
+              placeholder="Incolla qui la chiave pubblica (inizia con B...)" 
+              className="w-full rounded-lg border-gray-300 shadow-sm text-xs p-2 border font-mono" 
+            />
+            <p className="text-[10px] text-gray-400 mt-1">
+              Trovala in: Console Firebase {'>'} Impostazioni Progetto {'>'} Cloud Messaging {'>'} Web Push certificates.
+            </p>
+          </div>
         </div>
 
         <div className="pt-4 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 sm:gap-0">
@@ -1052,29 +1074,28 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
           
           <button
             onClick={() => handleEnablePush(false)}
-            disabled={pushEnabled}
             className={cn(
               "w-full text-center px-3 py-2 rounded-lg text-sm font-bold transition-colors border",
               pushEnabled 
-                ? "bg-green-50 text-green-700 border-green-200 cursor-default" 
+                ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100 cursor-pointer" 
                 : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
             )}
           >
             {pushEnabled ? (
               <span className="flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4" /> Notifiche Attive su questo dispositivo
+                <CheckCircle className="w-4 h-4" /> Notifiche Attive (Clicca per ri-sincronizzare)
               </span>
             ) : "Attiva Notifiche Push"}
           </button>
           
-          {pushEnabled && (
-            <button
+          <div className="mt-2 text-center">
+             <button
               onClick={() => handleEnablePush(false)}
-              className="w-full text-center px-3 py-2 mt-2 rounded-lg text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+              className="text-xs text-blue-600 underline hover:text-blue-800"
             >
-              <Sparkles className="w-3 h-3" /> Aggiorna Token (Se non ricevi notifiche)
+              Forza aggiornamento token
             </button>
-          )}
+          </div>
           
           {!pushEnabled && (
             <p className="text-[10px] text-gray-400 italic">
