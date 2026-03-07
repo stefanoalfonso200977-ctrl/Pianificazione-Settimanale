@@ -283,7 +283,8 @@ const checkAndNotify = async () => {
   return { 
     success: emailResult.success, 
     message: emailResult.success ? "Email inviata con successo." : "Errore invio email: " + emailResult.error,
-    taskCount: expiringTasks.length
+    taskCount: expiringTasks.length,
+    simulated: (emailResult as any).simulated
   };
 };
 
@@ -329,27 +330,6 @@ const getValidApiKey = async () => {
   }
 
   console.log("[GEMINI] No valid API Key found in Environment or Settings.");
-  return "";
-};
-  // This helps if the user named it something else (e.g., VITE_GEMINI_API_KEY)
-  console.log("[GEMINI] Scanning all environment variables for a valid key...");
-  for (const [keyName, value] of Object.entries(process.env)) {
-    if (!value || typeof value !== 'string') continue;
-    
-    // Skip known non-API key variables to save time/logs
-    if (keyName.includes("FIREBASE") || keyName.includes("URL") || keyName.includes("PATH")) continue;
-
-    const cleanValue = value.replace(/^["']|["']$/g, '').trim();
-    
-    if (cleanValue === knownFirebaseKey) continue;
-
-    // Strict check for Google API Key format (AIza...)
-    if (cleanValue.startsWith("AIza") && cleanValue.length > 35 && cleanValue.length < 45) {
-      console.log(`[GEMINI] Found potential key in variable: ${keyName}`);
-      return cleanValue;
-    }
-  }
-
   return "";
 };
 

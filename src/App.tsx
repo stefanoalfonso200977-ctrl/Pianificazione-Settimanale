@@ -1328,7 +1328,11 @@ export default function App() {
     try {
       const result = await api.triggerCheck();
       if (result.success) {
-        showAlert("Report Inviato", `Report inviato! ${result.taskCount} attività trovate in scadenza.`);
+        if (result.simulated) {
+          showAlert("Email Simulata", `ATTENZIONE: L'email è stata solo SIMULATA perché mancano i dati SMTP. Compila i campi SMTP nelle impostazioni per inviare email reali.\n\n${result.taskCount} attività trovate in scadenza.`);
+        } else {
+          showAlert("Report Inviato", `Report inviato! ${result.taskCount} attività trovate in scadenza.`);
+        }
       } else {
         showAlert("Errore", "Errore durante l'invio del report: " + result.message);
       }
