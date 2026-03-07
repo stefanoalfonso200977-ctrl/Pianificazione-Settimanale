@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read/write for all collections for this demo app
+    // WARNING: This is insecure and should be locked down in production
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

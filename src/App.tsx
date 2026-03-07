@@ -837,8 +837,7 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
       const permission = await Notification.requestPermission();
       if (permission === "granted") {
         // VAPID Key for Firebase Cloud Messaging
-        // Note: This key should ideally be fetched from the backend or env vars, but for this demo it's hardcoded.
-        // If you regenerate keys in Firebase Console, update this.
+        // This key must match the project "pianificazione-settimana"
         const vapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI"; 
         
         console.log("Registering service worker...");
