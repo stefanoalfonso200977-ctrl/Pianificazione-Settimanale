@@ -868,19 +868,25 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
     try {
       console.log("Requesting notification permission...");
       const permission = await Notification.requestPermission();
+      
       if (permission === "granted") {
         // VAPID Key for Firebase Cloud Messaging
-        // Use custom key if provided, otherwise try the hardcoded one (which might be invalid for this specific project)
         const defaultVapidKey = "BIdM_sJF62J2pmknqLylOut4fGdmhWCGhZP1Lqk3e-4zDu-Oj_4J-uqhxLOJrevU2wCnCi8b2j9OsmRmKQ81KMI";
         const vapidKey = customVapidKey || defaultVapidKey;
         
         console.log("Registering service worker with config:", activeConfig.projectId);
-        // Ensure the service worker is registered and ready with correct config
+        
+        // Use a simplified SW registration for better compatibility
         const swUrl = `/firebase-messaging-sw.js?apiKey=${activeConfig.apiKey}&projectId=${activeConfig.projectId}&messagingSenderId=${activeConfig.messagingSenderId}&appId=${activeConfig.appId}`;
         
-        const registration = await navigator.serviceWorker.register(swUrl, {
-          scope: '/'
-        });
+        let registration;
+        try {
+          registration = await navigator.serviceWorker.register(swUrl, { scope: '/' });
+          console.log("Service Worker registered with scope:", registration.scope);
+        } catch (err) {
+          console.error("Service Worker registration failed:", err);
+          throw new Error("Impossibile registrare il Service Worker. Riprova.");
+        }
         
         // Wait for the service worker to be active
         await navigator.serviceWorker.ready;
@@ -899,14 +905,19 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
         } else {
           throw new Error("Nessun token ricevuto da Firebase.");
         }
+      } else if (permission === "denied") {
+        if (!silent) showAlert("Permesso Negato", "Hai bloccato le notifiche. Devi sbloccarle dalle impostazioni del browser (clicca sul lucchetto nella barra degli indirizzi).");
       } else {
-        if (!silent) showAlert("Permesso Negato", "Permesso negato per le notifiche. Controlla le impostazioni del browser.");
+        // permission === "default" (dismissed)
+        if (!silent) showAlert("Attenzione", "Devi cliccare su 'Consenti' quando il browser te lo chiede per ricevere le notifiche.");
       }
     } catch (e: any) {
       console.error("Push error details:", e);
       let errorMsg = e.message;
       if (e.code === 'messaging/token-subscribe-failed' || e.message.includes("VAPID")) {
         errorMsg = "Chiave VAPID non valida. Vai nelle Impostazioni dell'app e inserisci la 'Web Push Certificate' corretta dal tuo progetto Firebase (Impostazioni > Cloud Messaging).";
+      } else if (e.message.includes("unregistered")) {
+        errorMsg = "Service Worker non registrato correttamente. Ricarica la pagina e riprova.";
       }
       if (!silent) showAlert("Errore Push", errorMsg);
     }
