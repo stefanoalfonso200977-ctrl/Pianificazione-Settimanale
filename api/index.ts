@@ -303,15 +303,26 @@ const checkAndNotify = async () => {
       
       // Optional: Cleanup invalid tokens
       if (response.failureCount > 0) {
+        const failedTokens: string[] = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
             const errorCode = resp.error?.code;
+            console.error(`[PUSH] Error sending to token ${tokens[idx]}:`, resp.error);
             if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
               console.log(`[PUSH] Removing invalid token: ${tokens[idx]}`);
-              // deleteDoc(doc(db, "push_tokens", tokens[idx])); // Async cleanup
+              failedTokens.push(tokens[idx]);
             }
           }
         });
+
+        if (failedTokens.length > 0) {
+          try {
+            await Promise.all(failedTokens.map(token => deleteDoc(doc(db, "push_tokens", token))));
+            console.log(`[PUSH] Removed ${failedTokens.length} invalid tokens.`);
+          } catch (cleanupError) {
+            console.error("[PUSH] Error removing invalid tokens:", cleanupError);
+          }
+        }
       }
     } else {
         if (getApps().length === 0) {
