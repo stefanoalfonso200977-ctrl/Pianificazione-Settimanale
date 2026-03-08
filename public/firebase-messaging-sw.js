@@ -70,3 +70,10 @@ self.addEventListener('notificationclick', function(event) {
     })
   );
 });
+
+// Fetch handler to satisfy PWA requirements
+self.addEventListener('fetch', (event) => {
+  // We don't need to do anything special here for now, 
+  // but a fetch handler is required for PWA installation criteria in some browsers.
+  // We can add caching logic here later if needed.
+});

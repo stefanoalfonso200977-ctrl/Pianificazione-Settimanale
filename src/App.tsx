@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent, type FC, type ChangeEvent } from "react";
 import { format, isSameDay, addDays, parseISO, differenceInCalendarDays, startOfWeek, endOfWeek, eachDayOfInterval, isToday, setMonth, setYear, getYear, getMonth } from "date-fns";
 import { it } from "date-fns/locale";
-import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database, ChevronLeft, ChevronRight, Plus, ListTodo, BookOpen, Maximize2, Bell } from "lucide-react";
+import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database, ChevronLeft, ChevronRight, Plus, ListTodo, BookOpen, Maximize2, Bell, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -1477,6 +1477,25 @@ export default function App() {
   const [researchQuery, setResearchQuery] = useState("");
   const [pendingTaskTitle, setPendingTaskTitle] = useState("");
   const [isReporting, setIsReporting] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
   
   // Global Modal State
   const [modal, setModal] = useState<{
@@ -1688,6 +1707,16 @@ export default function App() {
               </button>
             ))}
             <div className="w-px h-5 bg-gray-200 mx-1 hidden sm:block" />
+            {deferredPrompt && (
+              <button
+                onClick={handleInstallClick}
+                className="px-3 sm:px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 text-xs font-bold text-red-600 hover:bg-red-50 active:scale-95 shrink-0"
+                title="Installa App"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Installa</span>
+              </button>
+            )}
             <button
               onClick={handleSendReport}
               disabled={isReporting}
