@@ -294,6 +294,10 @@ const checkAndNotify = async () => {
           title: "Attività in Scadenza!",
           body: `Hai ${expiringTasks.length} attività che scadono a breve.`
         },
+        data: {
+          badge: expiringTasks.length.toString(),
+          url: "/"
+        },
         tokens: tokens,
       };
 

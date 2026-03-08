@@ -1497,6 +1497,42 @@ export default function App() {
 
   const closeModal = () => setModal(prev => ({ ...prev, isOpen: false }));
 
+  // Badge Management
+  useEffect(() => {
+    if ('setAppBadge' in navigator) {
+      const expiringCount = tasks.filter(t => {
+        if (t.status === "completed") return false;
+        const daysLeft = differenceInCalendarDays(parseISO(t.deadline), new Date());
+        return daysLeft <= 3;
+      }).length;
+      
+      if (expiringCount > 0) {
+        navigator.setAppBadge(expiringCount).catch(console.error);
+      } else if ('clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(console.error);
+      }
+    }
+  }, [tasks]);
+
+  // Foreground Notification Handler
+  useEffect(() => {
+    if (messaging) {
+      const unsubscribe = onMessage(messaging, (payload) => {
+        console.log('Foreground Message received: ', payload);
+        showAlert(payload.notification?.title || "Nuova Notifica", payload.notification?.body || "");
+        
+        // Update badge if provided in payload
+        if (payload.data?.badge && 'setAppBadge' in navigator) {
+           const badgeCount = parseInt(payload.data.badge, 10);
+           if (!isNaN(badgeCount)) {
+             navigator.setAppBadge(badgeCount).catch(console.error);
+           }
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
   const handleSendReport = async () => {
     setIsReporting(true);
     try {

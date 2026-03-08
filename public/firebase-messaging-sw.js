@@ -24,8 +24,49 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/icon-192.png'
+    icon: '/icon-192.png',
+    badge: '/icon-192.png', // Small icon for Android notification bar
+    data: payload.data
   };
 
+  // Set app badge if supported
+  if (payload.data && payload.data.badge && 'setAppBadge' in navigator) {
+    const badgeCount = parseInt(payload.data.badge, 10);
+    if (!isNaN(badgeCount)) {
+      navigator.setAppBadge(badgeCount).catch(error => {
+        console.error('Error setting app badge:', error);
+      });
+    }
+  }
+
   self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+self.addEventListener('notificationclick', function(event) {
+  console.log('[firebase-messaging-sw.js] Notification click Received.', event);
+  event.notification.close();
+
+  // Clear app badge
+  if ('clearAppBadge' in navigator) {
+    navigator.clearAppBadge().catch(error => {
+      console.error('Error clearing app badge:', error);
+    });
+  }
+
+  // Open the app
+  event.waitUntil(
+    clients.matchAll({type: 'window'}).then(function(windowClients) {
+      // Check if there is already a window/tab open with the target URL
+      for (var i = 0; i < windowClients.length; i++) {
+        var client = windowClients[i];
+        if (client.url === '/' && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // If not, open a new window/tab
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });
