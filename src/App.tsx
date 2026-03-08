@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent, type FC, type ChangeEvent } from "react";
 import { format, isSameDay, addDays, parseISO, differenceInCalendarDays, startOfWeek, endOfWeek, eachDayOfInterval, isToday, setMonth, setYear, getYear, getMonth } from "date-fns";
 import { it } from "date-fns/locale";
-import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database, ChevronLeft, ChevronRight, Plus, ListTodo, BookOpen, Maximize2, Bell, Download } from "lucide-react";
+import { Calendar as CalendarIcon, Trash2, Edit2, CheckCircle, AlertTriangle, Mail, Sparkles, History, Home, Settings, Paperclip, X, FileText, Image as ImageIcon, Clock, Cloud, Database, ChevronLeft, ChevronRight, Plus, ListTodo, BookOpen, Maximize2, Bell, Download, Share } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -1478,6 +1478,8 @@ export default function App() {
   const [pendingTaskTitle, setPendingTaskTitle] = useState("");
   const [isReporting, setIsReporting] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -1485,15 +1487,27 @@ export default function App() {
       setDeferredPrompt(e);
     };
     window.addEventListener("beforeinstallprompt", handler);
+    
+    // Check if standalone
+    const checkStandalone = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+      setIsStandalone(!!isStandalone);
+    };
+    checkStandalone();
+    window.addEventListener('appinstalled', () => setIsStandalone(true));
+    
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowInstallHelp(true);
     }
   };
   
@@ -1707,7 +1721,7 @@ export default function App() {
               </button>
             ))}
             <div className="w-px h-5 bg-gray-200 mx-1 hidden sm:block" />
-            {deferredPrompt && (
+            {!isStandalone && (
               <button
                 onClick={handleInstallClick}
                 className="px-3 sm:px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 text-xs font-bold text-red-600 hover:bg-red-50 active:scale-95 shrink-0"
@@ -2251,6 +2265,53 @@ export default function App() {
         onConfirm={modal.onConfirm}
         onCancel={closeModal}
       />
+
+      {/* Install Help Modal */}
+      {showInstallHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 relative">
+            <button 
+              onClick={() => setShowInstallHelp(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                <Download className="w-6 h-6" />
+              </div>
+              
+              <h3 className="text-lg font-bold text-gray-900">Installa App</h3>
+              
+              <div className="text-sm text-gray-600 space-y-4 text-left w-full bg-gray-50 p-4 rounded-xl">
+                <div>
+                  <p className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                    <span className="w-5 h-5 bg-black text-white rounded-full flex items-center justify-center text-xs">1</span>
+                    Su iPhone (iOS)
+                  </p>
+                  <p className="pl-7">Tocca il tasto <span className="font-bold">Condividi</span> <Share className="w-3 h-3 inline mx-1" /> nella barra in basso, poi scorri e seleziona <span className="font-bold">"Aggiungi alla schermata Home"</span>.</p>
+                </div>
+                
+                <div className="border-t border-gray-200 pt-3">
+                  <p className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                    <span className="w-5 h-5 bg-black text-white rounded-full flex items-center justify-center text-xs">2</span>
+                    Su Android
+                  </p>
+                  <p className="pl-7">Tocca il menu (tre puntini) in alto a destra e seleziona <span className="font-bold">"Installa app"</span> o <span className="font-bold">"Aggiungi a schermata Home"</span>.</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowInstallHelp(false)}
+                className="w-full py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors"
+              >
+                Ho capito
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
