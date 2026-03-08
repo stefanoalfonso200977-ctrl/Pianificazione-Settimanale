@@ -40,6 +40,8 @@ const initFirebaseAdmin = async () => {
       if (data.startsWith("'") || data.startsWith("\"")) {
         data = data.substring(1, data.length - 1);
       }
+      // Fix escaped newlines which often happen in Vercel env vars
+      data = data.replace(/\\n/g, '\n');
       serviceAccount = JSON.parse(data);
     } catch (e) {
       console.error("Env Service Account parse error:", e);
@@ -427,6 +429,63 @@ app.post("/api/test-email", async (req, res) => {
   const { email } = req.body;
   const result = await sendEmail(email, "Test Agente Pianificazione", "<p>Questa è una email di test.</p>");
   res.json(result);
+});
+
+app.post("/api/test-push", async (req, res) => {
+  try {
+    // Ensure Admin SDK is ready
+    const adminInitialized = await initFirebaseAdmin();
+    if (!adminInitialized) {
+      return res.status(500).json({ 
+        success: false, 
+        error: "Admin SDK non inizializzato. Configura FIREBASE_SERVICE_ACCOUNT nelle impostazioni o variabili d'ambiente." 
+      });
+    }
+
+    const tokensSnapshot = await getDocs(collection(db, "push_tokens"));
+    const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
+    
+    if (tokens.length === 0) {
+      return res.json({ success: false, error: "Nessun dispositivo registrato (Token non trovati)." });
+    }
+
+    const message = {
+      notification: {
+        title: "Test Notifica Push",
+        body: "Se leggi questo, le notifiche funzionano!"
+      },
+      tokens: tokens,
+    };
+
+    const response = await getAdminMessaging().sendEachForMulticast(message);
+    
+    // Cleanup invalid tokens
+    if (response.failureCount > 0) {
+      const failedTokens: string[] = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const errorCode = resp.error?.code;
+          if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
+            failedTokens.push(tokens[idx]);
+          }
+        }
+      });
+
+      if (failedTokens.length > 0) {
+        await Promise.all(failedTokens.map(token => deleteDoc(doc(db, "push_tokens", token))));
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      count: response.successCount, 
+      failures: response.failureCount 
+    });
+
+  } catch (error: any) {
+    console.error("Test Push Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 app.all("/api/cron", async (req, res) => {

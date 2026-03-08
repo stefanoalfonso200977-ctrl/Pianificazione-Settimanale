@@ -1162,14 +1162,39 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
         </div>
 
         <div className="pt-4 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 sm:gap-0">
-          <button
-            onClick={handleTestEmail}
-            disabled={loading}
-            className="text-sm text-gray-600 hover:text-red-600 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50 p-2 sm:p-0 border border-gray-200 sm:border-transparent rounded-lg sm:rounded-none"
-          >
-            <Mail className="w-4 h-4" />
-            Invia email di test
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleTestEmail}
+              disabled={loading}
+              className="text-sm text-gray-600 hover:text-red-600 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50 p-2 sm:p-0 border border-gray-200 sm:border-transparent rounded-lg sm:rounded-none"
+            >
+              <Mail className="w-4 h-4" />
+              Test Email
+            </button>
+            <button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const res = await fetch("/api/test-push", { method: "POST" });
+                  const data = await res.json();
+                  if (data.success) {
+                    showAlert("Successo", `Notifica inviata a ${data.count} dispositivi.`);
+                  } else {
+                    showAlert("Errore", `Errore invio push: ${data.error}`);
+                  }
+                } catch (e: any) {
+                  showAlert("Errore", "Errore di rete: " + e.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className="text-sm text-gray-600 hover:text-red-600 flex items-center justify-center sm:justify-start gap-2 disabled:opacity-50 p-2 sm:p-0 border border-gray-200 sm:border-transparent rounded-lg sm:rounded-none"
+            >
+              <Bell className="w-4 h-4" />
+              Test Push
+            </button>
+          </div>
           
           <button
             onClick={handleSave}
