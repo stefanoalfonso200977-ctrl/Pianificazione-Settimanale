@@ -1510,7 +1510,7 @@ export default function App() {
       setShowInstallHelp(true);
     }
   };
-  
+
   // Global Modal State
   const [modal, setModal] = useState<{
     isOpen: boolean;
