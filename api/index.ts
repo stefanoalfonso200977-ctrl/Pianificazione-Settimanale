@@ -40,9 +40,13 @@ const initFirebaseAdmin = async () => {
       if (data.startsWith("'") || data.startsWith("\"")) {
         data = data.substring(1, data.length - 1);
       }
-      // Fix escaped newlines which often happen in Vercel env vars
-      data = data.replace(/\\n/g, '\n');
+      
       serviceAccount = JSON.parse(data);
+      
+      // Handle potential double-escaped newlines in private key (common in some envs)
+      if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
     } catch (e) {
       console.error("Env Service Account parse error:", e);
     }

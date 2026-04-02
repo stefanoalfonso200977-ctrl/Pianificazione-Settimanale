@@ -943,6 +943,20 @@ function SettingsPanel({ showAlert, showConfirm }: { showAlert: (t: string, m: s
     }
   }, []);
 
+  // Listen for foreground messages
+  useEffect(() => {
+    if (messaging) {
+      const unsubscribe = onMessage(messaging, (payload) => {
+        console.log("Foreground message received:", payload);
+        const { title, body } = payload.notification || {};
+        if (title && body) {
+          showAlert(title, body);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, []);
+
   const handleSave = async () => {
     setLoading(true);
     try {
